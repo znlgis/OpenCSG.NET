@@ -5,7 +5,7 @@
     <AssemblyName>OpenCSG.NET</AssemblyName>
 
     <PackageId>OpenCSG.NET</PackageId>
-    <Version>1.0.0</Version>
+    <Version>0.0.0</Version>
     <Authors>Csg contributors</Authors>
     <Description>Constructive Solid Geometry (CSG) library for .NET. Solid primitives (Cube, Sphere, Cylinder), boolean operations (Union, Subtract, Intersect), and STL output. Ported from OpenJsCad csg.js.</Description>
     <PackageTags>Mesh;3D;Geometry;CSG;Model;Graphics</PackageTags>

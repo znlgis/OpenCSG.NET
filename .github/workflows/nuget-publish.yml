@@ -22,9 +22,15 @@ jobs:
       - name: Test
         run: dotnet test tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj -c Release
 
+      # Extract the version from the git tag (strip "v" prefix).
+      # e.g., tag "v1.2.3" → VERSION="1.2.3"
+      - name: Set version from tag
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+
       # Pack the core library for NuGet publication.
+      # -p:Version overrides the placeholder in the csproj.
       - name: Pack
-        run: dotnet pack src/OpenCSG.NET/OpenCSG.NET.csproj -c Release -o out
+        run: dotnet pack src/OpenCSG.NET/OpenCSG.NET.csproj -c Release -o out -p:Version=${{ env.VERSION }}
 
       # Publish the .nupkg to NuGet.org. --skip-duplicate allows re-running
       # the workflow for the same tag without error.
