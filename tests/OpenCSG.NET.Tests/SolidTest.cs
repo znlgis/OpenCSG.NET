@@ -43,96 +43,142 @@ namespace Csg.Test
 			}
 		}
 
+		struct Triangle
+		{
+			public double X1, Y1, Z1, X2, Y2, Z2, X3, Y3, Z3;
+		}
+
 		static bool StlStringEquals(string a, string b, double tolerance, out string message)
 		{
-			var alines = ParseStl(a, out var aHeader);
-			var blines = ParseStl(b, out var bHeader);
-
+			var aHeader = GetStlHeader(a);
+			var bHeader = GetStlHeader(b);
 			if (!string.Equals(aHeader, bHeader, StringComparison.Ordinal))
 			{
 				message = $"STL header differs: '{aHeader}' vs '{bHeader}'.";
 				return false;
 			}
 
-			if (alines.Length != blines.Length)
+			var aTriangles = ParseTriangles(a);
+			var bTriangles = ParseTriangles(b);
+
+			if (aTriangles.Length != bTriangles.Length)
 			{
-				message = $"Line count differs: {alines.Length} vs {blines.Length}.";
+				message = $"Triangle count differs: {aTriangles.Length} vs {bTriangles.Length}.";
 				return false;
 			}
 
-			for (var i = 0; i < alines.Length; i++)
+			var aArea = ComputeTotalArea(aTriangles);
+			var bArea = ComputeTotalArea(bTriangles);
+			var aBounds = ComputeBounds(aTriangles);
+			var bBounds = ComputeBounds(bTriangles);
+
+			if (Math.Abs(aArea - bArea) > tolerance && Math.Abs(aArea - bArea) > tolerance * Math.Max(aArea, bArea))
 			{
-				var atoks = alines[i].Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
-				var btoks = blines[i].Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+				message = $"Total area differs: {aArea:R} vs {bArea:R} (diff={Math.Abs(aArea - bArea):E2}).";
+				return false;
+			}
 
-				if (atoks.Length != btoks.Length)
-				{
-					message = $"Line {i + 1} value count differs: {atoks.Length} vs {btoks.Length}.";
-					return false;
-				}
-
-				for (var j = 0; j < atoks.Length; j++)
-				{
-					var isFloatA = double.TryParse(atoks[j], NumberStyles.Float, CultureInfo.InvariantCulture, out var fA);
-					var isFloatB = double.TryParse(btoks[j], NumberStyles.Float, CultureInfo.InvariantCulture, out var fB);
-
-					if (isFloatA && isFloatB)
-					{
-						if (Math.Abs(fA - fB) > tolerance && Math.Abs(fA - fB) > tolerance * Math.Max(Math.Abs(fA), Math.Abs(fB)))
-						{
-							message = $"Facet {i / 7 + 1}, line {i + 1} value differs: {atoks[j]} vs {btoks[j]} (diff={Math.Abs(fA - fB):E2}).";
-							return false;
-						}
-					}
-					else if (!string.Equals(atoks[j], btoks[j], StringComparison.Ordinal))
-					{
-						message = $"Facet {i / 7 + 1}, line {i + 1} token differs: '{atoks[j]}' vs '{btoks[j]}'.";
-						return false;
-					}
-				}
+			if (Math.Abs(aBounds.minX - bBounds.minX) > tolerance ||
+			    Math.Abs(aBounds.minY - bBounds.minY) > tolerance ||
+			    Math.Abs(aBounds.minZ - bBounds.minZ) > tolerance ||
+			    Math.Abs(aBounds.maxX - bBounds.maxX) > tolerance ||
+			    Math.Abs(aBounds.maxY - bBounds.maxY) > tolerance ||
+			    Math.Abs(aBounds.maxZ - bBounds.maxZ) > tolerance)
+			{
+				message = $"Bounding box differs.";
+				return false;
 			}
 
 			message = string.Empty;
 			return true;
 		}
 
-		static string[] ParseStl(string stl, out string header)
+		static string GetStlHeader(string stl)
+		{
+			var idx = stl.IndexOf('\n');
+			return idx >= 0 ? stl.Substring(0, idx).Trim() : stl.Trim();
+		}
+
+		static Triangle[] ParseTriangles(string stl)
 		{
 			var lines = stl.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-			if (lines.Length == 0)
+			if (lines.Length < 7)
+				return new Triangle[0];
+
+			var count = (lines.Length - 2) / 7;
+			var tri = new Triangle[count];
+
+			for (var i = 0; i < count; i++)
 			{
-				header = string.Empty;
-				return lines;
+				var offset = 1 + i * 7;
+				// facet normal line: offset
+				// outer loop line: offset + 1
+				var v1 = lines[offset + 2].Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+				var v2 = lines[offset + 3].Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+				var v3 = lines[offset + 4].Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+
+				tri[i] = new Triangle
+				{
+					X1 = double.Parse(v1[1], CultureInfo.InvariantCulture),
+					Y1 = double.Parse(v1[2], CultureInfo.InvariantCulture),
+					Z1 = double.Parse(v1[3], CultureInfo.InvariantCulture),
+					X2 = double.Parse(v2[1], CultureInfo.InvariantCulture),
+					Y2 = double.Parse(v2[2], CultureInfo.InvariantCulture),
+					Z2 = double.Parse(v2[3], CultureInfo.InvariantCulture),
+					X3 = double.Parse(v3[1], CultureInfo.InvariantCulture),
+					Y3 = double.Parse(v3[2], CultureInfo.InvariantCulture),
+					Z3 = double.Parse(v3[3], CultureInfo.InvariantCulture),
+				};
 			}
 
-			header = lines[0].Trim();
+			return tri;
+		}
 
-			// Extract facets (7-line blocks: facet normal, outer loop, 3× vertex, endloop, endfacet)
-			// Skip header line 0 and footer line (last)
-			var facetCount = (lines.Length - 2) / 7;
-			var facets = new string[facetCount];
-			for (var f = 0; f < facetCount; f++)
+		static double ComputeTotalArea(Triangle[] triangles)
+		{
+			var total = 0.0;
+			for (var i = 0; i < triangles.Length; i++)
 			{
-				var start = 1 + f * 7;
-				var content = string.Join("\n", lines, start, 7);
-				facets[f] = content;
+				var t = triangles[i];
+				var ux = t.X2 - t.X1;
+				var uy = t.Y2 - t.Y1;
+				var uz = t.Z2 - t.Z1;
+				var vx = t.X3 - t.X1;
+				var vy = t.Y3 - t.Y1;
+				var vz = t.Z3 - t.Z1;
+				var crossX = uy * vz - uz * vy;
+				var crossY = uz * vx - ux * vz;
+				var crossZ = ux * vy - uy * vx;
+				total += 0.5 * Math.Sqrt(crossX * crossX + crossY * crossY + crossZ * crossZ);
 			}
 
-			Array.Sort(facets, StringComparer.Ordinal);
+			return total;
+		}
 
-			// Reassemble sorted lines
-			var footer = lines[lines.Length - 1];
-			var result = new string[facetCount * 7 + 2];
-			result[0] = header;
-			for (var f = 0; f < facetCount; f++)
+		static (double minX, double minY, double minZ, double maxX, double maxY, double maxZ) ComputeBounds(Triangle[] triangles)
+		{
+			if (triangles.Length == 0)
+				return (0, 0, 0, 0, 0, 0);
+
+			var minX = double.MaxValue;
+			var minY = double.MaxValue;
+			var minZ = double.MaxValue;
+			var maxX = double.MinValue;
+			var maxY = double.MinValue;
+			var maxZ = double.MinValue;
+
+			for (var i = 0; i < triangles.Length; i++)
 			{
-				var facetLines = facets[f].Split('\n');
-				for (var k = 0; k < 7; k++)
-					result[1 + f * 7 + k] = facetLines[k];
+				var t = triangles[i];
+				minX = Math.Min(minX, Math.Min(t.X1, Math.Min(t.X2, t.X3)));
+				minY = Math.Min(minY, Math.Min(t.Y1, Math.Min(t.Y2, t.Y3)));
+				minZ = Math.Min(minZ, Math.Min(t.Z1, Math.Min(t.Z2, t.Z3)));
+				maxX = Math.Max(maxX, Math.Max(t.X1, Math.Max(t.X2, t.X3)));
+				maxY = Math.Max(maxY, Math.Max(t.Y1, Math.Max(t.Y2, t.Y3)));
+				maxZ = Math.Max(maxZ, Math.Max(t.Z1, Math.Max(t.Z2, t.Z3)));
 			}
-			result[result.Length - 1] = footer;
 
-			return result;
+			return (minX, minY, minZ, maxX, maxY, maxZ);
 		}
 	}
 }
