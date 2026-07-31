@@ -45,8 +45,14 @@ namespace Csg.Test
 
 		static bool StlStringEquals(string a, string b, double tolerance, out string message)
 		{
-			var alines = a.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-			var blines = b.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+			var alines = ParseStl(a, out var aHeader);
+			var blines = ParseStl(b, out var bHeader);
+
+			if (!string.Equals(aHeader, bHeader, StringComparison.Ordinal))
+			{
+				message = $"STL header differs: '{aHeader}' vs '{bHeader}'.";
+				return false;
+			}
 
 			if (alines.Length != blines.Length)
 			{
@@ -61,7 +67,7 @@ namespace Csg.Test
 
 				if (atoks.Length != btoks.Length)
 				{
-					message = $"Line {i + 1} token count differs: '{alines[i].Trim()}' vs '{blines[i].Trim()}'.";
+					message = $"Line {i + 1} value count differs: {atoks.Length} vs {btoks.Length}.";
 					return false;
 				}
 
@@ -74,13 +80,13 @@ namespace Csg.Test
 					{
 						if (Math.Abs(fA - fB) > tolerance && Math.Abs(fA - fB) > tolerance * Math.Max(Math.Abs(fA), Math.Abs(fB)))
 						{
-							message = $"Line {i + 1} value differs: {atoks[j]} vs {btoks[j]} (diff={Math.Abs(fA - fB):E2}).";
+							message = $"Facet {i / 7 + 1}, line {i + 1} value differs: {atoks[j]} vs {btoks[j]} (diff={Math.Abs(fA - fB):E2}).";
 							return false;
 						}
 					}
 					else if (!string.Equals(atoks[j], btoks[j], StringComparison.Ordinal))
 					{
-						message = $"Line {i + 1} token differs: '{atoks[j]}' vs '{btoks[j]}'.";
+						message = $"Facet {i / 7 + 1}, line {i + 1} token differs: '{atoks[j]}' vs '{btoks[j]}'.";
 						return false;
 					}
 				}
@@ -88,6 +94,45 @@ namespace Csg.Test
 
 			message = string.Empty;
 			return true;
+		}
+
+		static string[] ParseStl(string stl, out string header)
+		{
+			var lines = stl.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+			if (lines.Length == 0)
+			{
+				header = string.Empty;
+				return lines;
+			}
+
+			header = lines[0].Trim();
+
+			// Extract facets (7-line blocks: facet normal, outer loop, 3× vertex, endloop, endfacet)
+			// Skip header line 0 and footer line (last)
+			var facetCount = (lines.Length - 2) / 7;
+			var facets = new string[facetCount];
+			for (var f = 0; f < facetCount; f++)
+			{
+				var start = 1 + f * 7;
+				var content = string.Join("\n", lines, start, 7);
+				facets[f] = content;
+			}
+
+			Array.Sort(facets, StringComparer.Ordinal);
+
+			// Reassemble sorted lines
+			var footer = lines[lines.Length - 1];
+			var result = new string[facetCount * 7 + 2];
+			result[0] = header;
+			for (var f = 0; f < facetCount; f++)
+			{
+				var facetLines = facets[f].Split('\n');
+				for (var k = 0; k < 7; k++)
+					result[1 + f * 7 + k] = facetLines[k];
+			}
+			result[result.Length - 1] = footer;
+
+			return result;
 		}
 	}
 }
