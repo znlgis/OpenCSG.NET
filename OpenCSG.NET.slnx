@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/perf/">
+    <Project Path="perf/OpenCSG.NET.PerfTest/OpenCSG.NET.PerfTest.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/Runner.CPurlin/Runner.CPurlin.csproj" />
+    <Project Path="samples/Runner.Examples/Runner.Examples.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/OpenCSG.NET/OpenCSG.NET.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj" />
+  </Folder>
+</Solution>
