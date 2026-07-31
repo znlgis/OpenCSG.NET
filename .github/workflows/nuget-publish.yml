@@ -1,0 +1,41 @@
+# Publishes OpenCSG.NET to NuGet.org when a version tag (v*) is pushed.
+# Requires NUGET_API_KEY secret configured in the repository settings.
+name: Publish to NuGet
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # Restore the test project first — it transitively restores the core
+      # library via ProjectReference and pulls in NUnit dependencies.
+      - name: Restore
+        run: dotnet restore tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj
+
+      # Build in Release configuration. Building the test project also builds
+      # the referenced core library.
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      # Run all tests. Must pass before NuGet publish can proceed.
+      - name: Test
+        run: dotnet test tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj -c Release --no-build
+
+      # Pack only the core library (netstandard2.0), excluding tests and samples.
+      - name: Pack
+        run: dotnet pack src/OpenCSG.NET/OpenCSG.NET.csproj -c Release --no-build -o out
+
+      # Publish the .nupkg to NuGet.org. --skip-duplicate allows re-running
+      # the workflow for the same tag without error.
+      - name: Push to NuGet
+        run: dotnet nuget push out/*.nupkg -k ${{ secrets.NUGET_API_KEY }} -s https://api.nuget.org/v3/index.json --skip-duplicate
