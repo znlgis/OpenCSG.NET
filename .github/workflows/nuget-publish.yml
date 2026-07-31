@@ -22,10 +22,10 @@ jobs:
       - name: Restore
         run: dotnet restore tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj
 
-      # Build in Release configuration. Explicit project path is required
-      # because .NET 8 SDK cannot discover .slnx solution files.
+      # Build the test project in Release configuration. It transitively
+      # compiles the core library via ProjectReference.
       - name: Build
-        run: dotnet build src/OpenCSG.NET/OpenCSG.NET.csproj -c Release --no-restore
+        run: dotnet build tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj -c Release --no-restore
 
       # Run all tests. Must pass before NuGet publish can proceed.
       - name: Test

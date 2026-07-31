@@ -267,22 +267,22 @@ namespace Csg
 						polygonsPerPlane.Add (tag, ppp);
 					}
 				}
-			var destpolygons = new List<Polygon> ();
-			foreach (var planetag in polygonsPerPlane) {
-				var sourcepolygons = planetag.Value;
-				if (sourcepolygons.Count < 2) {
-					destpolygons.AddRange (sourcepolygons);
+				var destpolygons = new List<Polygon> ();
+				foreach (var planetag in polygonsPerPlane) {
+					var sourcepolygons = planetag.Value;
+					if (sourcepolygons.Count < 2) {
+						destpolygons.AddRange (sourcepolygons);
+					}
+					else {
+						var retesselatedpolygons = new List<Polygon> (sourcepolygons.Count);
+						Solid.RetesselateCoplanarPolygons (sourcepolygons, retesselatedpolygons);
+						destpolygons.AddRange (retesselatedpolygons);
+					}
 				}
-				else {
-					var retesselatedpolygons = new List<Polygon> (sourcepolygons.Count);
-					Solid.RetesselateCoplanarPolygons (sourcepolygons, retesselatedpolygons);
-					destpolygons.AddRange (retesselatedpolygons);
-				}
-			}
 
-			var result = Solid.FromPolygons (destpolygons);
-			result.IsRetesselated = true;
-			return result;
+				var result = Solid.FromPolygons (destpolygons);
+				result.IsRetesselated = true;
+				return result;
 		}
 	}
 
