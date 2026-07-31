@@ -267,38 +267,24 @@ namespace Csg
 						polygonsPerPlane.Add (tag, ppp);
 					}
 				}
-				var destpolygons = new List<Polygon> ();
-				//var retess = new List<PlanePolygons> ();
-				foreach (var planetag in polygonsPerPlane) {
-					var sourcepolygons = planetag.Value;
-					if (sourcepolygons.Count < 2) {
-						destpolygons.AddRange (sourcepolygons);
-					}
-					else {
-						var retesselatedpolygons = new List<Polygon> (sourcepolygons.Count);
-						//retess.Add (new PlanePolygons { Source = sourcepolygons, Retesselated = retesselatedpolygons });
-						Solid.RetesselateCoplanarPolygons (sourcepolygons, retesselatedpolygons);
-						destpolygons.AddRange (retesselatedpolygons);
-					}
+			var destpolygons = new List<Polygon> ();
+			foreach (var planetag in polygonsPerPlane) {
+				var sourcepolygons = planetag.Value;
+				if (sourcepolygons.Count < 2) {
+					destpolygons.AddRange (sourcepolygons);
 				}
-				//System.Threading.Tasks.Parallel.ForEach (retess, x => {
-				//	Solid.RetesselateCoplanarPolygons (x.Source, x.Retesselated);
-				//});
-				//foreach (var x in retess) {
-				//	destpolygons.AddRange (x.Retesselated);
-				//}
-
-				var result = Solid.FromPolygons (destpolygons);
-				result.IsRetesselated = true;
-				return result;
+				else {
+					var retesselatedpolygons = new List<Polygon> (sourcepolygons.Count);
+					Solid.RetesselateCoplanarPolygons (sourcepolygons, retesselatedpolygons);
+					destpolygons.AddRange (retesselatedpolygons);
+				}
 			}
-		}
 
-		//struct PlanePolygons
-		//{
-		//	public List<Polygon> Source;
-		//	public List<Polygon> Retesselated;
-		//}
+			var result = Solid.FromPolygons (destpolygons);
+			result.IsRetesselated = true;
+			return result;
+		}
+	}
 
 		struct PolygonsPerPlaneKey
 		{

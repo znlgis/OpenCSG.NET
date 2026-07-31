@@ -51,8 +51,15 @@ using (var wr = new BinaryWriter(fs))
 ## Build
 
 ```bash
-dotnet build
-dotnet test
+dotnet build OpenCSG.NET.slnx    # requires .NET 9+ SDK
+dotnet test tests/OpenCSG.NET.Tests/
+```
+
+To build the core library with .NET 8 SDK:
+
+```bash
+dotnet build src/OpenCSG.NET/OpenCSG.NET.csproj -c Release
+dotnet test tests/OpenCSG.NET.Tests/
 ```
 
 Targets: library = `netstandard2.0`, tests/samples/perf = `net8.0`.
@@ -125,8 +132,15 @@ using (var wr = new BinaryWriter(fs))
 ## 构建
 
 ```bash
-dotnet build
-dotnet test
+dotnet build OpenCSG.NET.slnx    # 需要 .NET 9+ SDK
+dotnet test tests/OpenCSG.NET.Tests/
+```
+
+使用 .NET 8 SDK 构建核心库：
+
+```bash
+dotnet build src/OpenCSG.NET/OpenCSG.NET.csproj -c Release
+dotnet test tests/OpenCSG.NET.Tests/
 ```
 
 目标框架：核心库 = `netstandard2.0`，测试/示例/性能 = `net8.0`。

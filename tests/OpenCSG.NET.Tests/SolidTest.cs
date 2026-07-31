@@ -14,11 +14,10 @@ namespace Csg.Test
 			var asmPath = System.Reflection.Assembly.GetCallingAssembly().Location;
 			var repoPath = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(asmPath))));
 			var resultsPath = Path.Combine(repoPath, "Results");
-			if (!Directory.Exists(resultsPath))
-			{
-				Console.WriteLine("Test results could not be found at {0}", resultsPath);
-				return;
-			}
+		if (!Directory.Exists(resultsPath))
+		{
+			Assert.Inconclusive("Test results directory not found at {0}", resultsPath);
+		}
 
 			var acceptedPath = Path.Combine(resultsPath, aname);
 			var rejectedPath = Path.Combine(resultsPath, rname);
