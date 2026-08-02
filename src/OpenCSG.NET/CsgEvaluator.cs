@@ -233,6 +233,9 @@ namespace Csg
 
         private static Solid EvaluateExtrude(ExtrudeNode n)
         {
+            if (n.Height <= 0)
+                throw new CsgEvaluationException($"Extrude height must be positive (Height={n.Height})");
+
             var pts2D = ExpandProfile(n.Profile);
             var tris = Triangulate(pts2D);
             if (tris.Count == 0)
