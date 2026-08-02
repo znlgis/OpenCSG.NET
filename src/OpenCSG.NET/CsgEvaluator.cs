@@ -277,6 +277,10 @@ namespace Csg
 
         private static Solid EvaluateWedge(WedgeNode n)
         {
+            if (n.Width <= 0 || n.Depth <= 0 || n.Height <= 0)
+                throw new CsgEvaluationException(
+                    $"Wedge dimensions must be positive (Width={n.Width}, Depth={n.Depth}, Height={n.Height})");
+
             double hx = n.Width / 2;
             double hy = n.Depth / 2;
             double h = n.Height;
@@ -301,7 +305,7 @@ namespace Csg
             // Front slope face (b0-b1-t1-t0)
             polygons.Add(new Polygon(new List<Vertex> { b0, b1, t1, t0 }));
 
-            // Back vertical face (b2-b3-t0-t1)
+            // Back slope face (b2-b3-t0-t1)
             polygons.Add(new Polygon(new List<Vertex> { b2, b3, t0, t1 }));
 
             // Left triangle (b3-b0-t0)
