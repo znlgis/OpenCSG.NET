@@ -8,7 +8,7 @@ namespace System.Runtime.CompilerServices
 
 namespace Csg
 {
-    // ---- 前向声明（子类在 Profiles.cs Task 3 定义） ----
+    // ---- Forward declaration: subclasses in Profiles.cs ----
     /// <summary>2D 截面形状基类。每种截面存储参数配方，求值时展开为多边形顶点。</summary>
     public abstract record Profile2D;
 
@@ -42,7 +42,7 @@ namespace Csg
     /// <param name="Height">拉伸高度（Z 轴正方向）</param>
     public record ExtrudeNode(Profile2D Profile, double Height) : CsgNode;
 
-    /// <param name="Corner">底边角点坐标（直角顶点）</param>
+    /// <param name="Corner">底面矩形中心坐标</param>
     /// <param name="Width">X 方向宽度</param>
     /// <param name="Depth">Y 方向深度</param>
     /// <param name="Height">Z 方向高度</param>

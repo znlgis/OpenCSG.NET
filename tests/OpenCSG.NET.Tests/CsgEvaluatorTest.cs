@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using NUnit.Framework;
 
 namespace Csg.Test
@@ -26,6 +25,14 @@ namespace Csg.Test
         public void EvaluateSimpleCylinder()
         {
             var node = new CylinderNode(new Vector3D(0, 0, 0), 1, 2);
+            var result = CsgEvaluator.Evaluate(node);
+            AssertAcceptedStl(result, "CsgEvaluatorTest");
+        }
+
+        [Test]
+        public void EvaluateOffsetCylinder()
+        {
+            var node = new CylinderNode(new Vector3D(5, 3, -2), 1, 2);
             var result = CsgEvaluator.Evaluate(node);
             AssertAcceptedStl(result, "CsgEvaluatorTest");
         }

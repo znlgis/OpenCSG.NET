@@ -1,0 +1,338 @@
+solid EvaluateOffsetCylinder
+facet normal 0 -1 0
+outer loop
+vertex 5 2 -2
+vertex 6 2 -2
+vertex 5.866025403784438 2 -1.5
+endloop
+endfacet
+facet normal 0.9659258262890682 0 0.25881904510252124
+outer loop
+vertex 5.866025403784438 2 -1.5
+vertex 6 2 -2
+vertex 6 4 -2
+endloop
+endfacet
+facet normal 0.9659258262890682 0 0.25881904510252124
+outer loop
+vertex 5.866025403784438 2 -1.5
+vertex 6 4 -2
+vertex 5.866025403784438 4 -1.5
+endloop
+endfacet
+facet normal 0 1 0
+outer loop
+vertex 5 4 -2
+vertex 5.866025403784438 4 -1.5
+vertex 6 4 -2
+endloop
+endfacet
+facet normal 0 -1 0
+outer loop
+vertex 5 2 -2
+vertex 5.866025403784438 2 -1.5
+vertex 5.5 2 -1.1339745962155614
+endloop
+endfacet
+facet normal 0.7071067811865478 0 0.7071067811865474
+outer loop
+vertex 5.5 2 -1.1339745962155614
+vertex 5.866025403784438 2 -1.5
+vertex 5.866025403784438 4 -1.5
+endloop
+endfacet
+facet normal 0.7071067811865478 0 0.7071067811865474
+outer loop
+vertex 5.5 2 -1.1339745962155614
+vertex 5.866025403784438 4 -1.5
+vertex 5.5 4 -1.1339745962155614
+endloop
+endfacet
+facet normal 0 1 0
+outer loop
+vertex 5 4 -2
+vertex 5.5 4 -1.1339745962155614
+vertex 5.866025403784438 4 -1.5
+endloop
+endfacet
+facet normal 0 -1 0
+outer loop
+vertex 5 2 -2
+vertex 5.5 2 -1.1339745962155614
+vertex 5 2 -1
+endloop
+endfacet
+facet normal 0.2588190451025209 0 0.9659258262890684
+outer loop
+vertex 5 2 -1
+vertex 5.5 2 -1.1339745962155614
+vertex 5.5 4 -1.1339745962155614
+endloop
+endfacet
+facet normal 0.2588190451025209 0 0.9659258262890684
+outer loop
+vertex 5 2 -1
+vertex 5.5 4 -1.1339745962155614
+vertex 5 4 -1
+endloop
+endfacet
+facet normal 0 1 0
+outer loop
+vertex 5 4 -2
+vertex 5 4 -1
+vertex 5.5 4 -1.1339745962155614
+endloop
+endfacet
+facet normal 0 -1 0
+outer loop
+vertex 5 2 -2
+vertex 5 2 -1
+vertex 4.5 2 -1.1339745962155612
+endloop
+endfacet
+facet normal -0.25881904510252046 0 0.9659258262890684
+outer loop
+vertex 4.5 2 -1.1339745962155612
+vertex 5 2 -1
+vertex 5 4 -1
+endloop
+endfacet
+facet normal -0.25881904510252046 0 0.9659258262890684
+outer loop
+vertex 4.5 2 -1.1339745962155612
+vertex 5 4 -1
+vertex 4.5 4 -1.1339745962155612
+endloop
+endfacet
+facet normal 0 1 -0
+outer loop
+vertex 5 4 -2
+vertex 4.5 4 -1.1339745962155612
+vertex 5 4 -1
+endloop
+endfacet
+facet normal 0 -1 0
+outer loop
+vertex 5 2 -2
+vertex 4.5 2 -1.1339745962155612
+vertex 4.133974596215562 2 -1.5
+endloop
+endfacet
+facet normal -0.7071067811865479 0 0.707106781186547
+outer loop
+vertex 4.133974596215562 2 -1.5
+vertex 4.5 2 -1.1339745962155612
+vertex 4.5 4 -1.1339745962155612
+endloop
+endfacet
+facet normal -0.7071067811865479 0 0.707106781186547
+outer loop
+vertex 4.133974596215562 2 -1.5
+vertex 4.5 4 -1.1339745962155612
+vertex 4.133974596215562 4 -1.5
+endloop
+endfacet
+facet normal 0 1 0
+outer loop
+vertex 5 4 -2
+vertex 4.133974596215562 4 -1.5
+vertex 4.5 4 -1.1339745962155612
+endloop
+endfacet
+facet normal 0 -1 0
+outer loop
+vertex 5 2 -2
+vertex 4.133974596215562 2 -1.5
+vertex 4 2 -1.9999999999999998
+endloop
+endfacet
+facet normal -0.9659258262890682 0 0.25881904510252135
+outer loop
+vertex 4 2 -1.9999999999999998
+vertex 4.133974596215562 2 -1.5
+vertex 4.133974596215562 4 -1.5
+endloop
+endfacet
+facet normal -0.9659258262890682 0 0.25881904510252135
+outer loop
+vertex 4 2 -1.9999999999999998
+vertex 4.133974596215562 4 -1.5
+vertex 4 4 -1.9999999999999998
+endloop
+endfacet
+facet normal 0 1 0
+outer loop
+vertex 5 4 -2
+vertex 4 4 -1.9999999999999998
+vertex 4.133974596215562 4 -1.5
+endloop
+endfacet
+facet normal -0 -1 0
+outer loop
+vertex 5 2 -2
+vertex 4 2 -1.9999999999999998
+vertex 4.133974596215562 2 -2.5
+endloop
+endfacet
+facet normal -0.9659258262890682 0 -0.25881904510252113
+outer loop
+vertex 4.133974596215562 2 -2.5
+vertex 4 2 -1.9999999999999998
+vertex 4 4 -1.9999999999999998
+endloop
+endfacet
+facet normal -0.9659258262890682 0 -0.25881904510252113
+outer loop
+vertex 4.133974596215562 2 -2.5
+vertex 4 4 -1.9999999999999998
+vertex 4.133974596215562 4 -2.5
+endloop
+endfacet
+facet normal 0 1 0
+outer loop
+vertex 5 4 -2
+vertex 4.133974596215562 4 -2.5
+vertex 4 4 -1.9999999999999998
+endloop
+endfacet
+facet normal 0 -1 0
+outer loop
+vertex 5 2 -2
+vertex 4.133974596215562 2 -2.5
+vertex 4.5 2 -2.8660254037844384
+endloop
+endfacet
+facet normal -0.7071067811865475 0 -0.7071067811865475
+outer loop
+vertex 4.5 2 -2.8660254037844384
+vertex 4.133974596215562 2 -2.5
+vertex 4.133974596215562 4 -2.5
+endloop
+endfacet
+facet normal -0.7071067811865475 0 -0.7071067811865475
+outer loop
+vertex 4.5 2 -2.8660254037844384
+vertex 4.133974596215562 4 -2.5
+vertex 4.5 4 -2.8660254037844384
+endloop
+endfacet
+facet normal 0 1 0
+outer loop
+vertex 5 4 -2
+vertex 4.5 4 -2.8660254037844384
+vertex 4.133974596215562 4 -2.5
+endloop
+endfacet
+facet normal 0 -1 -0
+outer loop
+vertex 5 2 -2
+vertex 4.5 2 -2.8660254037844384
+vertex 5 2 -3
+endloop
+endfacet
+facet normal -0.25881904510252124 0 -0.9659258262890682
+outer loop
+vertex 5 2 -3
+vertex 4.5 2 -2.8660254037844384
+vertex 4.5 4 -2.8660254037844384
+endloop
+endfacet
+facet normal -0.25881904510252124 0 -0.9659258262890682
+outer loop
+vertex 5 2 -3
+vertex 4.5 4 -2.8660254037844384
+vertex 5 4 -3
+endloop
+endfacet
+facet normal 0 1 0
+outer loop
+vertex 5 4 -2
+vertex 5 4 -3
+vertex 4.5 4 -2.8660254037844384
+endloop
+endfacet
+facet normal 0 -1 0
+outer loop
+vertex 5 2 -2
+vertex 5 2 -3
+vertex 5.5 2 -2.8660254037844384
+endloop
+endfacet
+facet normal 0.25881904510252124 0 -0.9659258262890682
+outer loop
+vertex 5.5 2 -2.8660254037844384
+vertex 5 2 -3
+vertex 5 4 -3
+endloop
+endfacet
+facet normal 0.25881904510252124 0 -0.9659258262890682
+outer loop
+vertex 5.5 2 -2.8660254037844384
+vertex 5 4 -3
+vertex 5.5 4 -2.8660254037844384
+endloop
+endfacet
+facet normal 0 1 0
+outer loop
+vertex 5 4 -2
+vertex 5.5 4 -2.8660254037844384
+vertex 5 4 -3
+endloop
+endfacet
+facet normal 0 -1 0
+outer loop
+vertex 5 2 -2
+vertex 5.5 2 -2.8660254037844384
+vertex 5.866025403784438 2 -2.5000000000000004
+endloop
+endfacet
+facet normal 0.7071067811865471 0 -0.707106781186548
+outer loop
+vertex 5.866025403784438 2 -2.5000000000000004
+vertex 5.5 2 -2.8660254037844384
+vertex 5.5 4 -2.8660254037844384
+endloop
+endfacet
+facet normal 0.7071067811865471 0 -0.707106781186548
+outer loop
+vertex 5.866025403784438 2 -2.5000000000000004
+vertex 5.5 4 -2.8660254037844384
+vertex 5.866025403784438 4 -2.5000000000000004
+endloop
+endfacet
+facet normal 0 1 0
+outer loop
+vertex 5 4 -2
+vertex 5.866025403784438 4 -2.5000000000000004
+vertex 5.5 4 -2.8660254037844384
+endloop
+endfacet
+facet normal 0 -1 0
+outer loop
+vertex 5 2 -2
+vertex 5.866025403784438 2 -2.5000000000000004
+vertex 6 2 -2.0000000000000004
+endloop
+endfacet
+facet normal 0.9659258262890682 0 -0.25881904510252124
+outer loop
+vertex 6 2 -2.0000000000000004
+vertex 5.866025403784438 2 -2.5000000000000004
+vertex 5.866025403784438 4 -2.5000000000000004
+endloop
+endfacet
+facet normal 0.9659258262890682 0 -0.25881904510252124
+outer loop
+vertex 6 2 -2.0000000000000004
+vertex 5.866025403784438 4 -2.5000000000000004
+vertex 6 4 -2.0000000000000004
+endloop
+endfacet
+facet normal 0 1 0
+outer loop
+vertex 5 4 -2
+vertex 6 4 -2.0000000000000004
+vertex 5.866025403784438 4 -2.5000000000000004
+endloop
+endfacet
+endsolid EvaluateOffsetCylinder

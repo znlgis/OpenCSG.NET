@@ -120,7 +120,9 @@ namespace Csg
         {
             using var doc = JsonDocument.ParseValue(ref reader);
             var root = doc.RootElement;
-            var typeName = root.GetProperty("$type").GetString();
+            if (!root.TryGetProperty("$type", out var typeProp))
+                throw new JsonException("Missing required '$type' discriminator property in Profile2D JSON");
+            var typeName = typeProp.GetString();
             var json = root.GetRawText();
 
             return typeName switch
@@ -166,7 +168,9 @@ namespace Csg
         {
             using var doc = JsonDocument.ParseValue(ref reader);
             var root = doc.RootElement;
-            var typeName = root.GetProperty("$type").GetString();
+            if (!root.TryGetProperty("$type", out var typeProp))
+                throw new JsonException("Missing required '$type' discriminator property in CsgNode JSON");
+            var typeName = typeProp.GetString();
             var json = root.GetRawText();
 
             return typeName switch

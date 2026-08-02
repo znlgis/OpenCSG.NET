@@ -20,7 +20,7 @@ namespace Csg
             {
                 BoxNode n => Solids.Cube(n.Size, n.Center),
                 SphereNode n => Solids.Sphere(n.Radius, n.Center),
-                CylinderNode n => Solids.Cylinder(n.Radius, n.Height, true),
+                CylinderNode n => EvaluateCylinder(n),
                 ConeNode n => throw new CsgEvaluationException("Cone not yet supported (requires Solid API investigation)"),
                 UnionNode n => EvaluateBool(n.Children, (a, b) => a.Union(b)),
                 SubtractNode n => EvaluateBool(n.Children, (a, b) => a.Subtract(b)),
@@ -61,6 +61,17 @@ namespace Csg
             if (rotation.Z != 0)
                 result = result.RotateZ(rotation.Z);
             return result;
+        }
+
+        private static Solid EvaluateCylinder(CylinderNode n)
+        {
+            var start = n.Center + new Vector3D(0, -n.Height / 2, 0);
+            var end   = n.Center + new Vector3D(0,  n.Height / 2, 0);
+            return Solids.Cylinder(new CylinderOptions
+            {
+                Start = start, End = end,
+                RadiusStart = n.Radius, RadiusEnd = n.Radius
+            });
         }
 
         static Vertex V(double x, double y, double z) => new Vertex(new Vector3D(x, y, z), new Vector2D(0, 0));

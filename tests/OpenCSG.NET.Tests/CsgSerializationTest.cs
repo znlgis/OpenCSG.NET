@@ -2,7 +2,7 @@ using Csg;
 using NUnit.Framework;
 using System.Text.Json;
 
-namespace OpenCSG.NET.Tests
+namespace Csg.Test
 {
     [TestFixture]
     public class CsgSerializationTest
