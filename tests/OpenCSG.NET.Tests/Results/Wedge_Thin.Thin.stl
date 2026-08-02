@@ -1,0 +1,58 @@
+solid Thin
+facet normal 0 0 -1
+outer loop
+vertex -2 0.25 0
+vertex 2 0.25 0
+vertex 2 -0.25 0
+endloop
+endfacet
+facet normal 0 0 -1
+outer loop
+vertex -2 0.25 0
+vertex 2 -0.25 0
+vertex -2 -0.25 0
+endloop
+endfacet
+facet normal 0 -0.9701425001453319 0.24253562503633297
+outer loop
+vertex -2 -0.25 0
+vertex 2 -0.25 0
+vertex 2 0 1
+endloop
+endfacet
+facet normal 0 -0.9701425001453319 0.24253562503633297
+outer loop
+vertex -2 -0.25 0
+vertex 2 0 1
+vertex -2 0 1
+endloop
+endfacet
+facet normal 0 0.9701425001453319 0.24253562503633297
+outer loop
+vertex 2 0.25 0
+vertex -2 0.25 0
+vertex -2 0 1
+endloop
+endfacet
+facet normal 0 0.9701425001453319 0.24253562503633297
+outer loop
+vertex 2 0.25 0
+vertex -2 0 1
+vertex 2 0 1
+endloop
+endfacet
+facet normal -1 0 0
+outer loop
+vertex -2 0.25 0
+vertex -2 -0.25 0
+vertex -2 0 1
+endloop
+endfacet
+facet normal 1 0 0
+outer loop
+vertex 2 -0.25 0
+vertex 2 0.25 0
+vertex 2 0 1
+endloop
+endfacet
+endsolid Thin

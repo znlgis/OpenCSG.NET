@@ -277,7 +277,40 @@ namespace Csg
 
         private static Solid EvaluateWedge(WedgeNode n)
         {
-            throw new CsgEvaluationException("Wedge evaluation not yet implemented");
+            double hx = n.Width / 2;
+            double hy = n.Depth / 2;
+            double h = n.Height;
+
+            var cx = n.Corner.X;
+            var cy = n.Corner.Y;
+            var cz = n.Corner.Z;
+
+            var b0 = V(cx - hx, cy - hy, cz);
+            var b1 = V(cx + hx, cy - hy, cz);
+            var b2 = V(cx + hx, cy + hy, cz);
+            var b3 = V(cx - hx, cy + hy, cz);
+
+            var t0 = V(cx - hx, cy, cz + h);
+            var t1 = V(cx + hx, cy, cz + h);
+
+            var polygons = new List<Polygon>();
+
+            // Bottom face (normal points -Z)
+            polygons.Add(new Polygon(new List<Vertex> { b3, b2, b1, b0 }));
+
+            // Front slope face (b0-b1-t1-t0)
+            polygons.Add(new Polygon(new List<Vertex> { b0, b1, t1, t0 }));
+
+            // Back vertical face (b2-b3-t0-t1)
+            polygons.Add(new Polygon(new List<Vertex> { b2, b3, t0, t1 }));
+
+            // Left triangle (b3-b0-t0)
+            polygons.Add(new Polygon(new List<Vertex> { b3, b0, t0 }));
+
+            // Right triangle (b1-b2-t1)
+            polygons.Add(new Polygon(new List<Vertex> { b1, b2, t1 }));
+
+            return Solid.FromPolygons(polygons);
         }
     }
 }

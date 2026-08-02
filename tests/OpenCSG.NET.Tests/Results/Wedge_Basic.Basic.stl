@@ -1,0 +1,58 @@
+solid Basic
+facet normal 0 0 -1
+outer loop
+vertex -1 1 0
+vertex 1 1 0
+vertex 1 -1 0
+endloop
+endfacet
+facet normal 0 0 -1
+outer loop
+vertex -1 1 0
+vertex 1 -1 0
+vertex -1 -1 0
+endloop
+endfacet
+facet normal 0 -0.8944271909999159 0.4472135954999579
+outer loop
+vertex -1 -1 0
+vertex 1 -1 0
+vertex 1 0 2
+endloop
+endfacet
+facet normal 0 -0.8944271909999159 0.4472135954999579
+outer loop
+vertex -1 -1 0
+vertex 1 0 2
+vertex -1 0 2
+endloop
+endfacet
+facet normal 0 0.8944271909999159 0.4472135954999579
+outer loop
+vertex 1 1 0
+vertex -1 1 0
+vertex -1 0 2
+endloop
+endfacet
+facet normal 0 0.8944271909999159 0.4472135954999579
+outer loop
+vertex 1 1 0
+vertex -1 0 2
+vertex 1 0 2
+endloop
+endfacet
+facet normal -1 0 0
+outer loop
+vertex -1 1 0
+vertex -1 -1 0
+vertex -1 0 2
+endloop
+endfacet
+facet normal 1 0 0
+outer loop
+vertex 1 -1 0
+vertex 1 1 0
+vertex 1 0 2
+endloop
+endfacet
+endsolid Basic
