@@ -1,0 +1,310 @@
+solid HBeam
+facet normal 0 0 -1
+outer loop
+vertex 40 -62 0
+vertex -40 -62 0
+vertex -40 -50 0
+endloop
+endfacet
+facet normal 0 0 -1
+outer loop
+vertex 5 -50 0
+vertex 40 -50 0
+vertex 40 -62 0
+endloop
+endfacet
+facet normal 0 -0 -1
+outer loop
+vertex 40 62 0
+vertex 40 50 0
+vertex 5 50 0
+endloop
+endfacet
+facet normal 0 0 -1
+outer loop
+vertex -40 62 0
+vertex 40 62 0
+vertex 5 50 0
+endloop
+endfacet
+facet normal 0 0 -1
+outer loop
+vertex -5 50 0
+vertex -40 50 0
+vertex -40 62 0
+endloop
+endfacet
+facet normal 0 0 -1
+outer loop
+vertex -5 50 0
+vertex -40 62 0
+vertex 5 50 0
+endloop
+endfacet
+facet normal 0 0 -1
+outer loop
+vertex -5 50 0
+vertex 5 50 0
+vertex 5 -50 0
+endloop
+endfacet
+facet normal 0 0 -1
+outer loop
+vertex -5 -50 0
+vertex -5 50 0
+vertex 5 -50 0
+endloop
+endfacet
+facet normal 0 0 -1
+outer loop
+vertex -5 -50 0
+vertex 5 -50 0
+vertex 40 -62 0
+endloop
+endfacet
+facet normal 0 0 -1
+outer loop
+vertex -40 -50 0
+vertex -5 -50 0
+vertex 40 -62 0
+endloop
+endfacet
+facet normal 0 0 1
+outer loop
+vertex -40 -50 50
+vertex -40 -62 50
+vertex 40 -62 50
+endloop
+endfacet
+facet normal 0 -0 1
+outer loop
+vertex 40 -62 50
+vertex 40 -50 50
+vertex 5 -50 50
+endloop
+endfacet
+facet normal 0 0 1
+outer loop
+vertex 5 50 50
+vertex 40 50 50
+vertex 40 62 50
+endloop
+endfacet
+facet normal 0 -0 1
+outer loop
+vertex 5 50 50
+vertex 40 62 50
+vertex -40 62 50
+endloop
+endfacet
+facet normal 0 0 1
+outer loop
+vertex -40 62 50
+vertex -40 50 50
+vertex -5 50 50
+endloop
+endfacet
+facet normal 0 0 1
+outer loop
+vertex 5 50 50
+vertex -40 62 50
+vertex -5 50 50
+endloop
+endfacet
+facet normal 0 -0 1
+outer loop
+vertex 5 -50 50
+vertex 5 50 50
+vertex -5 50 50
+endloop
+endfacet
+facet normal 0 0 1
+outer loop
+vertex 5 -50 50
+vertex -5 50 50
+vertex -5 -50 50
+endloop
+endfacet
+facet normal 0 0 1
+outer loop
+vertex 40 -62 50
+vertex 5 -50 50
+vertex -5 -50 50
+endloop
+endfacet
+facet normal 0 0 1
+outer loop
+vertex 40 -62 50
+vertex -5 -50 50
+vertex -40 -50 50
+endloop
+endfacet
+facet normal 0 -1 0
+outer loop
+vertex -40 -62 0
+vertex 40 -62 0
+vertex 40 -62 50
+endloop
+endfacet
+facet normal 0 -1 0
+outer loop
+vertex -40 -62 0
+vertex 40 -62 50
+vertex -40 -62 50
+endloop
+endfacet
+facet normal 1 0 0
+outer loop
+vertex 40 -62 0
+vertex 40 -50 0
+vertex 40 -50 50
+endloop
+endfacet
+facet normal 1 0 0
+outer loop
+vertex 40 -62 0
+vertex 40 -50 50
+vertex 40 -62 50
+endloop
+endfacet
+facet normal 0 1 0
+outer loop
+vertex 40 -50 0
+vertex 5 -50 0
+vertex 5 -50 50
+endloop
+endfacet
+facet normal 0 1 0
+outer loop
+vertex 40 -50 0
+vertex 5 -50 50
+vertex 40 -50 50
+endloop
+endfacet
+facet normal 1 0 0
+outer loop
+vertex 5 -50 0
+vertex 5 50 0
+vertex 5 50 50
+endloop
+endfacet
+facet normal 1 0 0
+outer loop
+vertex 5 -50 0
+vertex 5 50 50
+vertex 5 -50 50
+endloop
+endfacet
+facet normal 0 -1 0
+outer loop
+vertex 5 50 0
+vertex 40 50 0
+vertex 40 50 50
+endloop
+endfacet
+facet normal 0 -1 0
+outer loop
+vertex 5 50 0
+vertex 40 50 50
+vertex 5 50 50
+endloop
+endfacet
+facet normal 1 0 0
+outer loop
+vertex 40 50 0
+vertex 40 62 0
+vertex 40 62 50
+endloop
+endfacet
+facet normal 1 0 0
+outer loop
+vertex 40 50 0
+vertex 40 62 50
+vertex 40 50 50
+endloop
+endfacet
+facet normal 0 1 0
+outer loop
+vertex 40 62 0
+vertex -40 62 0
+vertex -40 62 50
+endloop
+endfacet
+facet normal 0 1 0
+outer loop
+vertex 40 62 0
+vertex -40 62 50
+vertex 40 62 50
+endloop
+endfacet
+facet normal -1 0 0
+outer loop
+vertex -40 62 0
+vertex -40 50 0
+vertex -40 50 50
+endloop
+endfacet
+facet normal -1 0 0
+outer loop
+vertex -40 62 0
+vertex -40 50 50
+vertex -40 62 50
+endloop
+endfacet
+facet normal 0 -1 0
+outer loop
+vertex -40 50 0
+vertex -5 50 0
+vertex -5 50 50
+endloop
+endfacet
+facet normal 0 -1 0
+outer loop
+vertex -40 50 0
+vertex -5 50 50
+vertex -40 50 50
+endloop
+endfacet
+facet normal -1 0 0
+outer loop
+vertex -5 50 0
+vertex -5 -50 0
+vertex -5 -50 50
+endloop
+endfacet
+facet normal -1 0 0
+outer loop
+vertex -5 50 0
+vertex -5 -50 50
+vertex -5 50 50
+endloop
+endfacet
+facet normal 0 1 0
+outer loop
+vertex -5 -50 0
+vertex -40 -50 0
+vertex -40 -50 50
+endloop
+endfacet
+facet normal 0 1 0
+outer loop
+vertex -5 -50 0
+vertex -40 -50 50
+vertex -5 -50 50
+endloop
+endfacet
+facet normal -1 0 0
+outer loop
+vertex -40 -50 0
+vertex -40 -62 0
+vertex -40 -62 50
+endloop
+endfacet
+facet normal -1 0 0
+outer loop
+vertex -40 -50 0
+vertex -40 -62 50
+vertex -40 -50 50
+endloop
+endfacet
+endsolid HBeam
