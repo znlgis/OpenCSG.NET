@@ -8,6 +8,11 @@ on:
   pull_request:
     branches: [main]
 
+# Restrict the automatically-provided GITHUB_TOKEN to read-only. CI only needs
+# to check out the repository; it does not write back to it.
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
