@@ -21,7 +21,7 @@ namespace Csg
                 BoxNode n => Solids.Cube(n.Size, n.Center),
                 SphereNode n => Solids.Sphere(n.Radius, n.Center),
                 CylinderNode n => EvaluateCylinder(n),
-                ConeNode n => throw new CsgEvaluationException("Cone not yet supported (requires Solid API investigation)"),
+                ConeNode n => EvaluateCone(n),
                 UnionNode n => EvaluateBool(n.Children, (a, b) => a.Union(b)),
                 SubtractNode n => EvaluateBool(n.Children, (a, b) => a.Subtract(b)),
                 IntersectNode n => EvaluateBool(n.Children, (a, b) => a.Intersect(b)),
@@ -71,6 +71,29 @@ namespace Csg
             {
                 Start = start, End = end,
                 RadiusStart = n.Radius, RadiusEnd = n.Radius
+            });
+        }
+
+        private static Solid EvaluateCone(ConeNode n)
+        {
+            if (n.Height <= 0)
+                throw new CsgEvaluationException($"Cone height must be positive (Height={n.Height})");
+            if (n.TopRadius < 0 || n.BottomRadius < 0)
+                throw new CsgEvaluationException(
+                    $"Cone radii must be non-negative (TopRadius={n.TopRadius}, BottomRadius={n.BottomRadius})");
+            if (n.TopRadius == 0 && n.BottomRadius == 0)
+                throw new CsgEvaluationException("Cone requires at least one non-zero radius");
+
+            // The cone spans the Y axis, mirroring EvaluateCylinder: start is the
+            // bottom face and end is the top face. Cylinder already supports
+            // differing start/end radii, producing a full cone (one radius 0) or
+            // a truncated cone / frustum (both radii non-zero).
+            var start = n.Center + new Vector3D(0, -n.Height / 2, 0);
+            var end   = n.Center + new Vector3D(0,  n.Height / 2, 0);
+            return Solids.Cylinder(new CylinderOptions
+            {
+                Start = start, End = end,
+                RadiusStart = n.BottomRadius, RadiusEnd = n.TopRadius
             });
         }
 
