@@ -1,0 +1,35 @@
+# Continuous integration: build the core library and run the test suite on
+# every push and pull request targeting main.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Restrict the automatically-provided GITHUB_TOKEN to read-only. CI only needs
+# to check out the repository; it does not write back to it.
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # Build the core library in Release. TreatWarningsAsErrors is enabled in
+      # the csproj, so any new warning fails the build.
+      - name: Build
+        run: dotnet build src/OpenCSG.NET/OpenCSG.NET.csproj -c Release
+
+      # Run the test suite. The test project transitively compiles the core
+      # library via ProjectReference.
+      - name: Test
+        run: dotnet test tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj -c Release

@@ -6,6 +6,12 @@ on:
   push:
     tags: ['v*']
 
+# The publish job checks out the repo (read) and pushes the package to NuGet
+# using NUGET_API_KEY; it never writes back to the repository, so read-only
+# access to repository contents is sufficient.
+permissions:
+  contents: read
+
 jobs:
   publish:
     runs-on: ubuntu-latest
