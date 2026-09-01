@@ -199,11 +199,7 @@ namespace Csg
                     var frontnodes = default(PolygonTreeNodeList);
                     var backnodes = default(PolygonTreeNodeList);
 
-                    PolygonTreeNodeList? treeNodes = null;
-                    if (_this.PolygonTreeNodes != null)
-                    {
-                        treeNodes = _this.PolygonTreeNodes;
-                    }
+                    PolygonTreeNodeList? treeNodes = _this.PolygonTreeNodes;
 
                     for (int i = 0, n = polygontreenodes.Count; i < n; i++)
                     {

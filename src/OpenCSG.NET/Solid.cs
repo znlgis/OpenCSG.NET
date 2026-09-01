@@ -49,23 +49,6 @@ namespace Csg
 			return TranslateBy (result, center);
 		}
 
-		Solid UnionSub (Solid csg, bool retesselate, bool canonicalize)
-		{
-			if (!MayOverlap (csg)) {
-				return UnionForNonIntersecting (csg);
-			}
-
-			var center = CombinedBounds (this, csg).Center;
-			var a = TranslateBy (this, center.Negated);
-			var b = TranslateBy (csg, center.Negated);
-			var result = a.UnionSubLocal (b);
-			if (retesselate)
-				result = result.Retesselated ();
-			if (canonicalize)
-				result = result.Canonicalized ();
-			return TranslateBy (result, center);
-		}
-
 		Solid UnionSubLocal (Solid csg)
 		{
 			if (!MayOverlap (csg)) {

@@ -8,6 +8,7 @@ namespace Csg
     public static class CsgSerialization
     {
         static readonly JsonSerializerOptions s_options = CreateOptions();
+        static readonly JsonSerializerOptions s_compactOptions = new JsonSerializerOptions(CreateOptions()) { WriteIndented = false };
 
         static JsonSerializerOptions CreateOptions()
         {
@@ -25,7 +26,7 @@ namespace Csg
 
         public static string ToJson(CsgNode node, bool indented = true)
         {
-            var opts = indented ? s_options : new JsonSerializerOptions(s_options) { WriteIndented = false };
+            var opts = indented ? s_options : s_compactOptions;
             return JsonSerializer.Serialize(node, typeof(CsgNode), opts);
         }
 
@@ -39,7 +40,7 @@ namespace Csg
 
         public static string ToJson(IEnumerable<CsgNode> nodes, bool indented = true)
         {
-            var opts = indented ? s_options : new JsonSerializerOptions(s_options) { WriteIndented = false };
+            var opts = indented ? s_options : s_compactOptions;
             return JsonSerializer.Serialize(nodes, opts);
         }
 

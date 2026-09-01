@@ -14,8 +14,6 @@ namespace Csg
         public readonly Plane Plane;
         public readonly PolygonShared Shared;
 
-        readonly bool debug = false;
-
         static readonly PolygonShared defaultShared = new PolygonShared(null);
 
         BoundingSphere? cachedBoundingSphere;
@@ -31,10 +29,6 @@ namespace Csg
                 verts[i] = vertices[i].Pos;
             }
             Plane = plane ?? Plane.FromVector3Ds (verts);
-			if (debug)
-            {
-                //CheckIfConvex();
-            }
         }
 
         public Polygon(params Vertex[] vertices)
@@ -124,33 +118,6 @@ namespace Csg
             {
                 return "null";
             }
-        }
-    }
-
-    public class Properties
-    {
-        public readonly Dictionary<string, object> All = new Dictionary<string, object>();
-        public Properties Merge(Properties otherproperties)
-        {
-            var result = new Properties();
-            foreach (var x in All)
-            {
-                result.All.Add(x.Key, x.Value);
-            }
-            foreach (var x in otherproperties.All)
-            {
-                result.All[x.Key] = x.Value;
-            }
-            return result;
-        }
-        public Properties Transform(Matrix4x4 matrix4x4)
-        {
-            var result = new Properties();
-            foreach (var x in All)
-            {
-                result.All.Add(x.Key, x.Value);
-            }
-            return result;
         }
     }
 }

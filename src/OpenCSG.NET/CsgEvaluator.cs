@@ -65,6 +65,11 @@ namespace Csg
 
         private static Solid EvaluateCylinder(CylinderNode n)
         {
+            if (n.Height <= 0)
+                throw new CsgEvaluationException($"Cylinder height must be positive (Height={n.Height})");
+            if (n.Radius <= 0)
+                throw new CsgEvaluationException($"Cylinder radius must be positive (Radius={n.Radius})");
+
             var start = n.Center + new Vector3D(0, -n.Height / 2, 0);
             var end   = n.Center + new Vector3D(0,  n.Height / 2, 0);
             return Solids.Cylinder(new CylinderOptions
@@ -195,7 +200,7 @@ namespace Csg
                 }
 
                 default:
-                    throw new InvalidOperationException(
+                    throw new CsgEvaluationException(
                         $"Unknown Profile2D type: {profile.GetType().Name}");
             }
         }
@@ -230,6 +235,9 @@ namespace Csg
             }
             if (indices.Count == 3)
                 tris.Add((indices[0], indices[1], indices[2]));
+            else if (indices.Count > 3)
+                throw new CsgEvaluationException(
+                    "Triangulation failed: no valid ear found (polygon is non-simple or degenerate)");
 
             return tris;
         }

@@ -223,10 +223,6 @@ namespace Csg
 			Min = min;
 			Max = max;
 		}
-		public BoundingBox At(Vector3D position, Vector3D size)
-		{
-			return new BoundingBox(position, position + size);
-		}
 		public BoundingBox(double dx, double dy, double dz)
 		{
 			Min = new Vector3D(-dx / 2, -dy / 2, -dz / 2);

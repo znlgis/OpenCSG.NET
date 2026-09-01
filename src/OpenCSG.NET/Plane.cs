@@ -184,6 +184,8 @@ namespace Csg
 			// ensure that we choose points that are not colinear:
 			var increment = 1;
 			while (n.Length == 0) {
+				if (2 + increment >= vectors.Length)
+					throw new ArgumentException ("All vectors are colinear", nameof(vectors));
 				c = vectors[2 + increment];
 				n = (b - a).Cross (c - a);
 				increment++;
