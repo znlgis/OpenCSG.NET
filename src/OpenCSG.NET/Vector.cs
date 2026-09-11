@@ -303,11 +303,29 @@ namespace Csg
 	{
 		readonly double[] elements;
 
-		public bool IsMirroring = false;
+		/// <summary>
+		/// 变换是否含镜像（左上 3×3 子阵行列式为负）。构造时由元素自动判定：
+		/// 镜像变换会使顶点绕序翻转，Solid.Transform / Plane.Transform 依赖此标志
+		/// 反向绕序并翻转平面法线，否则镜像后的实体法线全部朝内（体积为负）。
+		/// </summary>
+		public bool IsMirroring;
 
 		public Matrix4x4(double[] els)
 		{
+			if (els == null)
+				throw new ArgumentNullException(nameof(els));
+			if (els.Length < 16)
+				throw new ArgumentException("Matrix4x4 requires 16 elements", nameof(els));
 			elements = els;
+			IsMirroring = Determinant3x3(els) < 0;
+		}
+
+		/// <summary>左上 3×3 子阵的行列式（元素按行优先存放）。</summary>
+		static double Determinant3x3(double[] e)
+		{
+			return e[0] * (e[5] * e[10] - e[6] * e[9])
+				 - e[1] * (e[4] * e[10] - e[6] * e[8])
+				 + e[2] * (e[4] * e[9] - e[5] * e[8]);
 		}
 
 		public Matrix4x4()

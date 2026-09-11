@@ -42,7 +42,7 @@ namespace Csg
     /// <param name="Height">拉伸高度（Z 轴正方向）</param>
     public record ExtrudeNode(Profile2D Profile, double Height) : CsgNode;
 
-    /// <param name="Corner">底面矩形中心坐标</param>
+    /// <param name="Corner">底面矩形中心坐标（名字沿用历史，实际语义是「底面中心」而非角点）；底面位于 Z = Corner.Z</param>
     /// <param name="Width">X 方向宽度</param>
     /// <param name="Depth">Y 方向深度</param>
     /// <param name="Height">Z 方向高度</param>

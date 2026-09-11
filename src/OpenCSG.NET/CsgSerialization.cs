@@ -53,10 +53,35 @@ namespace Csg
         }
     }
 
+    /// <summary>读取期共用的校验/取值助手。</summary>
+    static class JsonReadHelpers
+    {
+        /// <summary>要求当前记号是 JSON 对象起始；否则立即抛 JsonException，
+        /// 避免转换器在多态/错误类型输入上把读取位置带偏、报出无关错误。</summary>
+        public static void RequireObject(ref Utf8JsonReader reader, string typeName)
+        {
+            if (reader.TokenType != JsonTokenType.StartObject)
+                throw new JsonException($"{typeName} must be a JSON object");
+        }
+
+        /// <summary>属性名比较（不区分大小写）。</summary>
+        public static bool NameEquals(string? name, string expected)
+            => string.Equals(name, expected, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>读取数值型属性值；非数值时抛 JsonException 而非 InvalidOperationException。</summary>
+        public static double ReadNumber(ref Utf8JsonReader reader, string? name)
+        {
+            if (reader.TokenType != JsonTokenType.Number)
+                throw new JsonException($"Property '{name}' must be a JSON number");
+            return reader.GetDouble();
+        }
+    }
+
     sealed class Vector3DConverter : JsonConverter<Vector3D>
     {
         public override Vector3D Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
+            JsonReadHelpers.RequireObject(ref reader, "Vector3D");
             double x = 0, y = 0, z = 0;
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
@@ -64,12 +89,10 @@ namespace Csg
                 {
                     var prop = reader.GetString();
                     reader.Read();
-                    switch (prop)
-                    {
-                        case "x": x = reader.GetDouble(); break;
-                        case "y": y = reader.GetDouble(); break;
-                        case "z": z = reader.GetDouble(); break;
-                    }
+                    // 分量名不区分大小写：手写/第三方生成的 PascalCase JSON 不再被静默读成 (0,0,0)。
+                    if (JsonReadHelpers.NameEquals(prop, "x")) x = JsonReadHelpers.ReadNumber(ref reader, prop);
+                    else if (JsonReadHelpers.NameEquals(prop, "y")) y = JsonReadHelpers.ReadNumber(ref reader, prop);
+                    else if (JsonReadHelpers.NameEquals(prop, "z")) z = JsonReadHelpers.ReadNumber(ref reader, prop);
                 }
             }
             return new Vector3D(x, y, z);
@@ -89,6 +112,7 @@ namespace Csg
     {
         public override Vector2D Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
+            JsonReadHelpers.RequireObject(ref reader, "Vector2D");
             double x = 0, y = 0;
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
@@ -96,11 +120,8 @@ namespace Csg
                 {
                     var prop = reader.GetString();
                     reader.Read();
-                    switch (prop)
-                    {
-                        case "x": x = reader.GetDouble(); break;
-                        case "y": y = reader.GetDouble(); break;
-                    }
+                    if (JsonReadHelpers.NameEquals(prop, "x")) x = JsonReadHelpers.ReadNumber(ref reader, prop);
+                    else if (JsonReadHelpers.NameEquals(prop, "y")) y = JsonReadHelpers.ReadNumber(ref reader, prop);
                 }
             }
             return new Vector2D(x, y);

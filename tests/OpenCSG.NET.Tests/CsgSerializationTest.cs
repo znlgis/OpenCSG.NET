@@ -102,6 +102,57 @@ namespace Csg.Test
         }
 
         [Test]
+        public void MissingTypeDiscriminator_ThrowsJsonException()
+        {
+            Assert.Throws<JsonException>(() => CsgSerialization.FromJson("{\"center\":{\"x\":0,\"y\":0,\"z\":0}}"));
+        }
+
+        [Test]
+        public void WrongTypedVectorMember_ThrowsJsonException()
+        {
+            // 数值型分量的位置给了标量：转换器必须立即报错，而不是把读取位置带偏
+            var json = "{\"$type\":\"Box\",\"center\":5,\"size\":{\"x\":1,\"y\":1,\"z\":1}}";
+            Assert.Throws<JsonException>(() => CsgSerialization.FromJson(json));
+        }
+
+        [Test]
+        public void NonNumericVectorComponent_ThrowsJsonException()
+        {
+            var json = "{\"$type\":\"Box\",\"center\":{\"x\":\"a\",\"y\":1,\"z\":1},\"size\":{\"x\":1,\"y\":1,\"z\":1}}";
+            Assert.Throws<JsonException>(() => CsgSerialization.FromJson(json));
+        }
+
+        [Test]
+        public void VectorComponents_AreReadCaseInsensitively()
+        {
+            // 手写 JSON 常见 PascalCase 分量：不得被静默读成 (0,0,0)
+            var json = "{\"$type\":\"Box\",\"center\":{\"X\":1,\"Y\":2,\"Z\":3},\"size\":{\"X\":4,\"Y\":5,\"Z\":6}}";
+            var box = (BoxNode)CsgSerialization.FromJson(json);
+            Assert.That(box.Center.X, Is.EqualTo(1));
+            Assert.That(box.Center.Y, Is.EqualTo(2));
+            Assert.That(box.Center.Z, Is.EqualTo(3));
+            Assert.That(box.Size.X, Is.EqualTo(4));
+            Assert.That(box.Size.Y, Is.EqualTo(5));
+            Assert.That(box.Size.Z, Is.EqualTo(6));
+        }
+
+        [Test]
+        public void NullProfile_EvaluationThrowsEvaluationException()
+        {
+            var node = CsgSerialization.FromJson("{\"$type\":\"Extrude\",\"profile\":null,\"height\":1}");
+            Assert.Throws<CsgEvaluationException>(() => CsgEvaluator.Evaluate(node));
+        }
+
+        [Test]
+        public void MinimalJson_EvaluatesToEmptySolid()
+        {
+            // 缺省尺寸 = 0 → Solids.Cube 返回空实体（不抛异常）
+            var node = CsgSerialization.FromJson("{\"$type\":\"Box\"}");
+            var solid = CsgEvaluator.Evaluate(node);
+            Assert.That(solid.Polygons.Count, Is.EqualTo(0));
+        }
+
+        [Test]
         public void Idempotent_DoubleSerialize()
         {
             var node = new ExtrudeNode(Profiles.Capsule(3, 1), 5);

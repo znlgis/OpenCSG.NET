@@ -246,20 +246,6 @@ namespace Csg
         Polygon? polygon;
         bool removed;
 
-        public BoundingBox? BoundingBox => polygon?.BoundingBox;
-
-        public void AddPolygons(List<Polygon> polygons)
-        {
-            if (!IsRootNode)
-            {
-                throw new InvalidOperationException("New polygons can only be added to  root nodes.");
-            }
-            for (var i = 0; i < polygons.Count; i++)
-            {
-                AddChild(polygons[i]);
-            }
-        }
-
         public void Remove()
         {
             if (!this.removed)

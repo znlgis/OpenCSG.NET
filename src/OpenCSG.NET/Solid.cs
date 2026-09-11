@@ -372,21 +372,7 @@ namespace Csg
 				return false;
 			}
 			else {
-				var mybounds = Bounds;
-				var otherbounds = csg.Bounds;
-				if (mybounds.Max.X < otherbounds.Min.X)
-					return false;
-				if (mybounds.Min.X > otherbounds.Max.X)
-					return false;
-				if (mybounds.Max.Y < otherbounds.Min.Y)
-					return false;
-				if (mybounds.Min.Y > otherbounds.Max.Y)
-					return false;
-				if (mybounds.Max.Z < otherbounds.Min.Z)
-					return false;
-				if (mybounds.Min.Z > otherbounds.Max.Z)
-					return false;
-				return true;
+				return Bounds.Intersects (csg.Bounds);
 			}
 		}
 
@@ -940,12 +926,17 @@ namespace Csg
 		}
 		public Vertex LookupOrCreate (ref Vertex vertex)
 		{
+			// 键必须用 long：坐标 ×(1/容差) 后极易超出 int 范围（|坐标| > 21474.8
+			// 时 X*1e5 已越界，越界转换在 x64 上统一得到 int.MinValue，使大量
+			// 相距很远的顶点塌缩为同一键、被错误合并 → 布尔结果退化）。
+			// 取整用 Math.Floor 而非截断：截断对负数与正数不对称（-0.05 与 +0.05
+			// 落入不同宽度的桶），镜像几何会因此得到不同的规范化结果。
 			var key = new Key {
-				X = (int)(vertex.Pos.X * multiplier + 0.5),
-				Y = (int)(vertex.Pos.Y * multiplier + 0.5),
-				Z = (int)(vertex.Pos.Z * multiplier + 0.5),
-				U = (int)(vertex.Tex.X * multiplier + 0.5),
-				V = (int)(vertex.Tex.Y * multiplier + 0.5),
+				X = (long)Math.Floor (vertex.Pos.X * multiplier + 0.5),
+				Y = (long)Math.Floor (vertex.Pos.Y * multiplier + 0.5),
+				Z = (long)Math.Floor (vertex.Pos.Z * multiplier + 0.5),
+				U = (long)Math.Floor (vertex.Tex.X * multiplier + 0.5),
+				V = (long)Math.Floor (vertex.Tex.Y * multiplier + 0.5),
 			};
 			if (lookuptable.TryGetValue (key, out var v))
 				return v;
@@ -954,7 +945,7 @@ namespace Csg
 		}
 		struct Key
 		{
-			public int X, Y, Z, U, V;
+			public long X, Y, Z, U, V;
 		}
 		class KeyComparer : IEqualityComparer<Key>
 		{
@@ -987,11 +978,13 @@ namespace Csg
 		}
 		public Plane LookupOrCreate (Plane plane)
 		{
+			// 同 VertexFactory：键用 long 防越界，取整用 Math.Floor 保证正负对称。
+			// 平面 W = n·p 与坐标同量级，大坐标（如测量坐标 49256）下 W*1e5 必然越界。
 			var key = new Key {
-				X = (int)(plane.Normal.X * multiplier + 0.5),
-				Y = (int)(plane.Normal.Y * multiplier + 0.5),
-				Z = (int)(plane.Normal.Z * multiplier + 0.5),
-				W = (int)(plane.W * multiplier + 0.5),
+				X = (long)Math.Floor (plane.Normal.X * multiplier + 0.5),
+				Y = (long)Math.Floor (plane.Normal.Y * multiplier + 0.5),
+				Z = (long)Math.Floor (plane.Normal.Z * multiplier + 0.5),
+				W = (long)Math.Floor (plane.W * multiplier + 0.5),
 			};
 			if (lookuptable.TryGetValue (key, out var p))
 				return p;
@@ -1000,7 +993,7 @@ namespace Csg
 		}
 		struct Key
 		{
-			public int X, Y, Z, W;
+			public long X, Y, Z, W;
 		}
 		class KeyComparer : IEqualityComparer<Key>
 		{

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.CompilerServices;
 using System.IO;
 using System.Globalization;
@@ -71,10 +71,26 @@ namespace Csg.Test
 			var bArea = ComputeTotalArea(bTriangles);
 			var aBounds = ComputeBounds(aTriangles);
 			var bBounds = ComputeBounds(bTriangles);
+			var aVolume = ComputeSignedVolume(aTriangles);
+			var bVolume = ComputeSignedVolume(bTriangles);
 
 			if (Math.Abs(aArea - bArea) > tolerance && Math.Abs(aArea - bArea) > tolerance * Math.Max(aArea, bArea))
 			{
 				message = $"Total area differs: {aArea:R} vs {bArea:R} (diff={Math.Abs(aArea - bArea):E2}).";
+				return false;
+			}
+
+			// 带符号体积（散度定理）：面积与包围盒对绕序反转/镜像完全无感，此项专门守住法线朝向。
+			if (Math.Abs(aVolume - bVolume) > tolerance
+			    && Math.Abs(aVolume - bVolume) > tolerance * Math.Max(Math.Abs(aVolume), Math.Abs(bVolume)))
+			{
+				message = $"Signed volume differs: {aVolume:R} vs {bVolume:R} (diff={Math.Abs(aVolume - bVolume):E2}).";
+				return false;
+			}
+
+			if ((aVolume > 0) != (bVolume > 0))
+			{
+				message = $"Signed volume sign differs (outward-facing normals changed): {aVolume:R} vs {bVolume:R}.";
 				return false;
 			}
 
@@ -132,6 +148,21 @@ namespace Csg.Test
 			}
 
 			return tri;
+		}
+
+		/// <summary>散度定理带符号体积：法线一致朝外（STL 绕序逆时针）时为正。</summary>
+		static double ComputeSignedVolume(Triangle[] triangles)
+		{
+			var volume = 0.0;
+			for (var i = 0; i < triangles.Length; i++)
+			{
+				var t = triangles[i];
+				var crossX = t.Y2 * t.Z3 - t.Z2 * t.Y3;
+				var crossY = t.Z2 * t.X3 - t.X2 * t.Z3;
+				var crossZ = t.X2 * t.Y3 - t.Y2 * t.X3;
+				volume += t.X1 * crossX + t.Y1 * crossY + t.Z1 * crossZ;
+			}
+			return volume / 6.0;
 		}
 
 		static double ComputeTotalArea(Triangle[] triangles)

@@ -23,12 +23,18 @@ namespace Csg
         {
             Vertices = vertices;
             Shared = shared ?? defaultShared;
-            var verts = new Vector3D[vertices.Count];
-			for (int i = 0; i < verts.Length; i++)
+            if (plane == null)
             {
-                verts[i] = vertices[i].Pos;
+                // 仅在调用方未给平面时才复制顶点位置求平面：布尔运算路径
+                // （分割/重剖分/翻转）都显式传平面，此处不再为空跑一次的数组分配。
+                var verts = new Vector3D[vertices.Count];
+                for (int i = 0; i < verts.Length; i++)
+                {
+                    verts[i] = vertices[i].Pos;
+                }
+                plane = Plane.FromVector3Ds (verts);
             }
-            Plane = plane ?? Plane.FromVector3Ds (verts);
+            Plane = plane;
         }
 
         public Polygon(params Vertex[] vertices)

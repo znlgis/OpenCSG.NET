@@ -16,6 +16,11 @@ namespace Csg
     {
         public static Solid Evaluate(CsgNode node)
         {
+            // 反序列化得到的节点可能为 null（如 JSON 中 profile/child 显式为 null），
+            // 这里统一抛求值异常，避免下游 switch 里抛 NullReferenceException。
+            if (node is null)
+                throw new CsgEvaluationException("CsgNode must not be null");
+
             return node switch
             {
                 BoxNode n => Solids.Cube(n.Size, n.Center),
@@ -107,6 +112,9 @@ namespace Csg
         /// <summary>Expand a Profile2D into a list of 2D polygon vertices (counter-clockwise).</summary>
         static List<Vector2D> ExpandProfile(Profile2D profile)
         {
+            if (profile is null)
+                throw new CsgEvaluationException("Profile2D must not be null");
+
             switch (profile)
             {
                 case RectangleProfile p:

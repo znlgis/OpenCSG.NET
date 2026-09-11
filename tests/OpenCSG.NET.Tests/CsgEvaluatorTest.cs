@@ -80,6 +80,27 @@ namespace Csg.Test
         }
 
         [Test]
+        public void EvaluateNullNode_ThrowsEvaluationException()
+        {
+            Assert.Throws<CsgEvaluationException>(() => CsgEvaluator.Evaluate(null));
+        }
+
+        [Test]
+        public void EvaluateAll_ReturnsOneSolidPerNode()
+        {
+            var solids = CsgEvaluator.EvaluateAll(new CsgNode[]
+            {
+                new BoxNode(new Vector3D(0, 0, 0), new Vector3D(1, 1, 1)),
+                new SphereNode(new Vector3D(0, 0, 0), 1),
+            });
+
+            Assert.That(solids.Count, Is.EqualTo(2));
+            Assert.That(solids[0].Polygons.Count, Is.EqualTo(6));
+            GeometryAssert.AssertSolidInvariants(solids[0], "EvaluateAll[0]");
+            GeometryAssert.AssertSolidInvariants(solids[1], "EvaluateAll[1]");
+        }
+
+        [Test]
         public void EvaluateComplexTree()
         {
             var box = new BoxNode(new Vector3D(0, 0, 0), new Vector3D(1, 1, 1));

@@ -24,7 +24,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
+    <!-- System.Runtime.CompilerServices.Unsafe 由 System.Text.Json 传递引入，代码未直接使用，不再显式引用。 -->
     <PackageReference Include="System.Text.Json" Version="8.0.6" />
   </ItemGroup>
 
