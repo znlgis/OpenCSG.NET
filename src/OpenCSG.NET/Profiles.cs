@@ -43,6 +43,12 @@ namespace Csg
     /// <param name="Thickness">壁厚</param>
     public record LShapeProfile(double Vertical, double Horizontal, double Thickness) : Profile2D;
 
+    /// <summary>任意闭合多边形截面（点列按逆时针，首尾不重复）。
+    /// 用于需要"圆弧采样点与直边共享顶点"的精确相切轮廓（如减重口 4-R50）：
+    /// Extrude 的侧壁按相邻点逐段生成 ⇒ 接点为精确共享顶点，无相切布尔的微台阶。</summary>
+    /// <param name="Points">逆时针闭合点列（2D）</param>
+    public record PolygonProfile(System.Collections.Generic.IReadOnlyList<Vector2D> Points) : Profile2D;
+
     /// <summary>参数化截面便捷工厂。</summary>
     public static class Profiles
     {

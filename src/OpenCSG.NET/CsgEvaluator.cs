@@ -196,6 +196,9 @@ namespace Csg
                     return pts;
                 }
 
+                case PolygonProfile p:
+                    return new List<Vector2D>(p.Points);
+
                 case LShapeProfile p:
                 {
                     return new List<Vector2D> {

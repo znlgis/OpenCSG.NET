@@ -156,6 +156,7 @@ namespace Csg
                 "Trapezoid"  => JsonSerializer.Deserialize<TrapezoidProfile>(json, options)!,
                 "Capsule"    => JsonSerializer.Deserialize<CapsuleProfile>(json, options)!,
                 "LShape"     => JsonSerializer.Deserialize<LShapeProfile>(json, options)!,
+                "Polygon"    => JsonSerializer.Deserialize<PolygonProfile>(json, options)!,
                 _ => throw new JsonException($"Unknown Profile2D $type: {typeName}")
             };
         }
@@ -171,6 +172,7 @@ namespace Csg
                 TrapezoidProfile  => "Trapezoid",
                 CapsuleProfile    => "Capsule",
                 LShapeProfile     => "LShape",
+                PolygonProfile    => "Polygon",
                 _ => throw new JsonException($"Unknown Profile2D type: {value.GetType().Name}")
             };
 
