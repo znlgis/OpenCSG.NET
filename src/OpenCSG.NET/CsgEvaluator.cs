@@ -197,7 +197,21 @@ namespace Csg
                 }
 
                 case PolygonProfile p:
-                    return new List<Vector2D>(p.Points);
+                {
+                    // 2026-09-18：多边形截面统一规整为**逆时针**（按有符号面积判定）。
+                    // 动机：镜像（px 取负）会把绕向翻成顺时针，若渲染端对绕向敏感，同一零件
+                    // 的 +X/−X 实例会得到不同体积/不同倒角落位（件16 尖端倒角即卡在此处）。
+                    var poly = new List<Vector2D>(p.Points);
+                    double area2 = 0;
+                    for (int i = 0; i < poly.Count; i++)
+                    {
+                        var a = poly[i];
+                        var b = poly[(i + 1) % poly.Count];
+                        area2 += a.X * b.Y - b.X * a.Y;
+                    }
+                    if (area2 < 0) poly.Reverse();   // 顺时针 ⇒ 反转为逆时针
+                    return poly;
+                }
 
                 case LShapeProfile p:
                 {
