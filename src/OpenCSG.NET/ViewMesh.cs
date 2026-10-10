@@ -11,7 +11,7 @@ using System.Text;
 /// <summary>
 /// 三角网格（本模块的几何输入）：右手系、单位与模型一致（mm）。
 /// <para>
-/// <b>来源</b>：本项目由 <c>OpenCSG.NET</c> 的 <c>Solid.Polygons</c>（凸多边形）扇形三角化而来
+/// <b>来源</b>：调用方工程由 <c>OpenCSG.NET</c> 的 <c>Solid.Polygons</c>（凸多边形）扇形三角化而来
 /// —— 与参考实现（znlgis/GStarCad.Net.Demo，MIT，MESHVIEWEXPORT）从 STL 读取三角形相比，
 /// 少了一次「EXPORT 落 STL → 再解析」的往返，而后续消隐算法只依赖三角形，二者等价。
 /// </para>
@@ -53,7 +53,7 @@ public readonly struct ViewTriangle
 
 /// <summary>
 /// STL 读取（本模块的**辅助**输入通道）：主链路走 CSG 实体直接三角化（旧 `ViewExportBridge` 已随
-/// 2026-10-10 命令面简化删除，三角化口径见 `CadCsgEvaluator`）
+/// 202某分图0-10 命令面简化删除，三角化口径见 `CadCsgEvaluator`）
 /// （CSG 实体直接三角化，无文件往返）；STL 入口用于离线核对与外部模型
 /// —— 与参考实现（znlgis/GStarCad.Net.Demo，MIT，MESHVIEWEXPORT）的输入口径对齐。
 /// </summary>
@@ -135,4 +135,5 @@ public static class ViewMeshReader
         => new(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
 }
 }
+
 

@@ -73,7 +73,7 @@ public sealed class ViewCurves<T>
 
 /// <summary>
 /// **圆弧识别**（纯函数，图纸坐标）：把消隐后由三角面片离散出来的**短折线**还原成圆弧/整圆，
-/// 使落图实体与甲方图纸一致（源图 6-1 实测有 97 ARC + 13 CIRCLE，全部以真曲线表达；我们此前只能落折线）。
+/// 使落图实体与需求方图纸一致（源图 某分图 实测有 97 ARC + 13 CIRCLE，全部以真曲线表达；我们此前只能落折线）。
 /// <para>
 /// 判据（全部满足才合并，宁缺勿滥）：
 /// ① 折线段首尾相接成链（端点容差 <see cref="MinJoinTolerance"/>，实际按视图尺度自适应）；
@@ -141,7 +141,7 @@ public static class ViewArcFitter
     /// <param name="joinTolerance">端点相接容差（mm）；null ⇒ 按视图对角线自适应 max(1e-3, 对角线×1e-4)。</param>
     /// <remarks>
     /// <b>成链不分可见性</b>：贴着自身面的轮廓会被消隐判成 V-H 交替，按可见性分组成链会把一条完整的弧
-    /// 切成一段段认不出来的碎链（用户实测 2026-10-09：三维里的圆弧落到二维全成折线）。整段弧的可见性
+    /// 切成一段段认不出来的碎链（用户实测 202某分图0-09：三维里的圆弧落到二维全成折线）。整段弧的可见性
     /// 改由所辖线段的**多数票**决定 —— 真实被遮挡的弧（如孔的另一侧）仍然整体落虚线。
     /// </remarks>
     public static ViewCurves<T> Fit<T>(
@@ -621,7 +621,7 @@ public static class ViewArcFitter
 
         // —— 弧的起止角：取"包含全部点、扫掠最小"的那段弧（等价于补上最大角间隙）——
         // 早前用"首末点角度 + 中间点定方向"的写法在末点角度恰好落在起点**之前**时会算出
-        // 349° 的假弧（2026-10-09 用户实测：图上出现凭空的大圈），故改为按角间隙求解。
+        // 349° 的假弧（202某分图0-09 用户实测：图上出现凭空的大圈），故改为按角间隙求解。
         var angles = new List<double>(to - from + 1);
         for (var k = from; k <= to; k++)
             angles.Add(Unwrap(Angle(circle.Center, vertices[k])));
@@ -830,4 +830,5 @@ public static class ViewArcFitter
     private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 }
 }
+
 

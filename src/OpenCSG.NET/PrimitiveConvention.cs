@@ -48,14 +48,14 @@ public sealed class PrimitiveConvention
     /// <summary>
     /// <c>Solid3d.CreateFrustum</c> 的**圆台实参映射**：底面椭圆取**下（底）半径**、顶面取**上半径**。
     ///
-    /// 真实签名（**2026-09-21 由 AutoCAD 2024 托管程序集 <c>acdbmgd.dll</c> 元数据实测**）：
+    /// 真实签名（**：
     /// <c>CreateFrustum(Double height, Double radiusAlongX, Double radiusAlongY, Double topRadius)</c>
-    /// —— 即「高 + 底面椭圆两半径 + 顶面半径」；GStarCAD（GrxCAD）为同源 API，
-    /// 仓库内 Fs.Fox.CAD 的 DotNetARX 锥体助手 <c>CreateFrustum(h, r, r, 0)</c>（顶点朝上）与之口径一致。
+    /// —— 即「高 + 底面椭圆两半径 + 顶面半径」；某 CAD 宿主（某 CAD 内核）为同源 API，
+    /// 仓库内 某 CAD 内核库 的 DotNetARX 锥体助手 <c>CreateFrustum(h, r, r, 0)</c>（顶点朝上）与之口径一致。
     ///
     /// **历史缺陷（本轮定位并修复）**：宿主侧实体构造层 原先按「(h, topRadius, bottomRadius, bottomRadius)」传参，
-    /// 得到的是**倒置圆台**（底 = 上半径、顶 = 下半径）—— 由于 2026-09-20 之前模型里**没有任何圆锥/圆台**，
-    /// 该分支从未被执行；件13 定位销引入锥面后，CAD 里的销会渲染成**漏斗形**（细端朝下、粗端朝上）。
+    /// 得到的是**倒置圆台**（底 = 上半径、顶 = 下半径）—— 由于 
+    /// 该分支长期未被触发；一旦用到锥面，宿主里的锥体会渲染成**漏斗形**（细端朝下、粗端朝上）。
     /// </summary>
     public static (double RadiusAlongX, double RadiusAlongY, double TopRadius) FrustumRadii(
         double bottomRadius, double topRadius) => (bottomRadius, bottomRadius, topRadius);
@@ -92,4 +92,6 @@ public sealed class PrimitiveConvention
         => center - size / 2 - probeMinFactor * size;
 }
 }
+
+
 

@@ -5,7 +5,7 @@ using System;
 using System.Collections.Generic;
 
 /// <summary>
-/// 三角网格（三维模型导出用）：**Z-up、单位与模型一致（mm）**，与 GStarCAD 实体口径相同。
+/// 三角网格（三维模型导出用）：**Z-up、单位与模型一致（mm）**，与 某 CAD 宿主 实体口径相同。
 /// </summary>
 public readonly struct MeshTriangle
 {
@@ -39,7 +39,7 @@ public readonly struct MeshPoint
 /// <summary>
 /// CSG 实体 → 三角网格（Z-up）。
 /// <para>
-/// <b>坐标系</b>：OpenCSG 为 Y-up，GStarCAD 实体为 Z-up，二者按「Y↔Z 交换」桥接
+/// <b>坐标系</b>：OpenCSG 为 Y-up，某 CAD 宿主 实体为 Z-up，二者按「Y↔Z 交换」桥接
 /// （与 <c>CadCsgEvaluator</c> 及 <c>ViewExportBridge</c> 同一口径）——导出的 STL 与
 /// 在 CAD 里落图的实体是同一姿态，不会「导出后零件躺着」。
 /// </para>
@@ -91,4 +91,5 @@ public static class CsgMesh
     }
 }
 }
+
 

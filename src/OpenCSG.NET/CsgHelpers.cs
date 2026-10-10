@@ -37,16 +37,16 @@ public static class CsgHelpers
             CsgNodes.Transform(new Vector3D(-center.X, -center.Y, -center.Z), rotation, node));
 
     /// <summary>轴沿 Z 的圆柱：Cylinder 默认高沿 Y，绕中心转 90° 使轴线沿 Z（贯穿板厚方向）。</summary>
-    /// <summary>轴线沿 X 的圆柱（2026-09-18 新增：件11/12/13 起吊板族板面在 Y-Z 平面、厚沿 X，
+    /// <summary>轴线沿 X 的圆柱
     /// 其圆头与吊孔为沿 X 的圆柱）。实现 = 沿 Z 圆柱绕自身中心旋 90° 到 X 轴。</summary>
     /// <summary>
-    /// 吊耳类板轮廓（Y-Z 平面、厚沿 X；件11 / 件12 / 件13 共用）：
+    /// 带凸耳（吊耳形）的板类轮廓（Y-Z 平面、厚沿 X；多个零件共用）：
     /// **左直立边 + 顶部 R 圆头 + 与圆头相切的斜边落至右下角 + 底边**，Ø 孔与圆头同轴。
     ///
     /// 相切（图上圆弧与直线无明显过渡）：切线角由几何反解 —— 过底边外端、与"圆心 (zLeft+R, yCenter)、
     /// 半径 R"的圆相切：A·c²+B·c+C=0（c = cot 夹角），取较小正根：
-    ///   件11 (1275/2850/R150) c=0.3392 ⇒ **71.27°**；件12 (375/340/R125) ⇒ **70.90°**；
-    ///   件13 (323/190/R125) ⇒ **70.92°** —— 三件均 ≈70°，与图纸名义标注吻合。
+    ///   某零件 (1275/2850/R150) c=0.3392 ⇒ **71.27°**；某零件 (375/340/R125) ⇒ **70.90°**；
+    ///   某零件 (323/190/R125) ⇒ **70.92°** —— 三件均 ≈70°，与图纸名义标注吻合。
     ///
     /// 构造：盒（板底 → 切点标高）− 切线半平面 − **肩部（孔心以上 ∩ 圆盘以外）** ∪ 圆头 − 孔。
     /// **肩部必须用"圆盘补集"减法**：被减项 = Subtract(boxUpper, head) ⇒ 圆盘以内自动补回。
@@ -59,9 +59,9 @@ public static class CsgHelpers
     /// </summary>
     /// <summary>
     /// (X,Y) 截面多边形沿 **Z** 拉伸的精确楔块（用于角部/斜面切割，替代 HalfPlaneCut）。
-    /// HalfPlaneCut 的切割体是边长 √2·halfExtent 的方块且法向易错，本项目已三次踩坑
-    /// （件11 覆盖不足、件16 啃料 141、件1/4 方向符号）⇒ 统一改用本精确法。
-    /// **Extrude 实际落在局部 z ∈ [0, h]**（2026-09-18 四数探针实证：件14 ±X 同向偏 20 = 2×板厚/2 ✗），
+    /// HalfPlaneCut 的切割体是边长 √2·halfExtent 的方块且法向易错，调用方工程已三次踩坑
+    /// （某零件 覆盖不足、某零件 啃料 141、某零件/4 方向符号）⇒ 统一改用本精确法。
+    /// **Extrude 实际落在局部 z ∈ [0, h]**，
     /// 故平移须为 zCenter − h/2 才能以 zCenter 居中（此前写成 + h/2 ⇒ 每个用户沿拉伸方向偏 h/2 ✗）。
     /// </summary>
     /// <param name="points">(X,Y) 截面顶点（绕向由内核自动规整为逆时针）。</param>
@@ -77,8 +77,8 @@ public static class CsgHelpers
 
     /// <summary>
     /// **(X,Z) 断面沿 Y 拉伸的棱柱** —— 用于「断面在**径向-轴向**平面、沿**周向**拉伸」的弧形件
-    /// （6-2 行4 挡槽 = 沿弧弯曲的 L 型：断面 (X 径向, Z 轴向)、累加方向 = 该处周向 Y）。
-    /// 实现 = <see cref="PrismXY"/> 后绕 X 轴 +90°：**(x,y,z) → (x,−z,y)** ⇒ 断面 y(轴向) → 罩壳 Z、
+    /// （某分图 行4 挡槽 = 沿弧弯曲的 L 型：断面 (X 径向, Z 轴向)、累加方向 = 该处周向 Y）。
+    /// 实现 = <see cref="PrismXY"/> 后绕 X 轴 +90°：**(x,y,z) → (x,−z,y)** ⇒ 断面 y(轴向) → Z、
     /// 拉伸 z → 周向 Y；再沿 Y 平移到 yCenter（−Y 方向拉伸故取 +length/2 居中）。
     /// 坑：直接用 PrismXY 会得到「断面在 X-Y、沿 Z 拉伸」的错误姿态 ✗；两次 Transform 的组合语义见
     /// <see cref="Place"/>/<see cref="PlaceRotateThenTranslate"/>。
@@ -99,8 +99,8 @@ public static class CsgHelpers
     /// **把一段圆弧追加到断面点列**（圆心 (cx, cy)、半径 r、角度自 aFrom → aTo，单位：度；跳过起点、含终点）。
     /// 用途：在二维断面里做**相切圆角**（含 **凹角**）—— 圆弧顶点与相邻直边**共用端点** ⇒ 无台阶、**无外挂体**。
     /// 坑：① 圆心必须沿「料内」方向内移 r 才能与两面相切（符号写反 ⇒ 材料长到件外 ✗）；
-    /// ② **端点不得与已有点重复**（零面积侧面会让内核 BSP 退化 ✗，件4 曾据此崩溃）；
-    /// ③ 用圆柱布尔做圆角会在渲染里露出**圆柱本体** ✗（件4 实测「两根圆柱」），必须走本方法。
+    /// ② **端点不得与已有点重复**（零面积侧面会让内核 BSP 退化 ✗，某零件 曾据此崩溃）；
+    /// ③ 用圆柱布尔做圆角会在渲染里露出**圆柱本体** ✗（某零件 实测「两根圆柱」），必须走本方法。
     /// </summary>
     public static void AddArc(List<(double X, double Y)> points, double cx, double cy, double r,
         double aFromDeg, double aToDeg, int steps)
@@ -118,7 +118,7 @@ public static class CsgHelpers
         => PrismXY(new[] { (x, y), (x + dx * leg, y), (x, y + dy * leg) }, zCenter, thickness);
     /// <summary>
     /// 起吊板**斜边角**（度，与水平夹角）：与 <see cref="LugPlate"/> 内斜边**同源**（同一相切二次方程）✓。
-    /// 件14 的斜边必须用此角 ⇒ 与件11 斜边**数学上精确平行/重合** ✓（此前用常量近似 ⇒ 亚毫米级发散 ⇒ 缝/相交 ✗）。
+    /// 某零件 的斜边必须用此角 ⇒ 与某零件 斜边**数学上精确平行/重合** ✓（此前用常量近似 ⇒ 亚毫米级发散 ⇒ 缝/相交 ✗）。
     /// </summary>
     public static double LugPlateSlantAngleDeg(double width, double yBottom, double yCenter, double headRadius)
     {
@@ -192,7 +192,7 @@ public static class CsgHelpers
     /// OpenCSG 的 Cone 即**圆台**，与 <c>CylinderNode</c> 同为「以 center 为中心、跨 Y 轴」）精确拼接：
     /// 直线段**逐段精确**，圆弧段由调用方给出离散站点（误差随离散密度收敛）。
     ///
-    /// 用途（2026-09-20）：6-5 件13 **定位销** = φ20 底段圆柱 + 1:10 锥面 + 2-R5 尖端
+    /// 用途：**定位销**类零件 = 底段圆柱 + 锥面 + 尖端圆角
     /// （图纸详图「13 / 1:2」，见 <c>LowerShellGeometry.LocatingPinProfile</c>）。
     ///
     /// 站点须按 Y **严格升序**、半径 ≥ 0 且每段至少一端 &gt; 0（否则无法成体）。
@@ -228,7 +228,7 @@ public static class CsgHelpers
     /// <summary>
     /// size×size 角切（X-Y 面、厚沿 Z）：绕 Z 旋转 45° 的方盒（边长 size·√2），
     /// 内缘与角点围成 size×size 等腰直角三角。仅覆盖角部三角，不触及板边其余部分。
-    /// size 无默认值（2026-09-16）：加劲肋族 5 块的"上下切 50×50 三角"由常量
+    /// size 无默认值：加劲肋族 5 块的"上下切 50×50 三角"由常量
     /// <c>StiffenerCornerCut</c> → <c>SupportDimensions.Part4CornerCut / StiffenerCornerCutLower</c> 驱动，
     /// 默认参数会让 JSON 覆盖静默失效。
     /// </summary>
@@ -239,12 +239,12 @@ public static class CsgHelpers
         return RotateAboutCenter(box, new Vector3D(x0, y0, zC), new Vector3D(0, 0, 45));
     }
 
-    // ── 2026-09-22 新增：本项目反复踩到的构造细节（见 6-2 行3/行4/行5 的返工记录）──
+    // ── ──
 
     /// <summary>
     /// **凸角圆角**：角点 (cx, cy)、**料在 (inX, inY) 方向**（各取 ±1）⇒
     /// 先 `Subtract` **贴角方块**（只切角尖），再 `Union` 与两面**相切**的圆盘（圆心 = 角点沿有料方向内移 r）✓。
-    /// 实测：只切角尖 + 相切补圆 ⇒ **包络保持不变**（件3 验证：倒角前后体积逐位相同 476 000.000 ✓）。
+    /// 实测：只切角尖 + 相切补圆 ⇒ **包络保持不变**（某零件 验证：倒角前后体积逐位相同 476 000.000 ✓）。
     /// 坑：方块中心偏离角点 r/2 ⇒ 多切 ⇒ 包络缩短 ✗；圆心符号写反 ⇒ 材料加到件外 ✗。
     /// </summary>
     public static CsgNode RoundConvexCorner(CsgNode body, double cx, double cy, double r, double length, double inX, double inY)
@@ -256,8 +256,8 @@ public static class CsgHelpers
 
     /// <summary>
     /// **凹（再入）角圆角**：(sx, sy) 指向**空料**方向 ⇒ 加一个与两面**相切**的圆盘（圆心 = 角点 + (sx·r, sy·r)，轴沿 Z）✓。
-    /// 坑：直接 Union 整个圆盘 = 加凸包而非圆角 ✗（件3 曾因此体积 +37 800 mm³）；
-    /// 半径受断面限制（圆盘 X 上限 = 角点 + 2r ⇒ 不得越出断面/弧面 ✗，件4 因此取 r ≤ 2.5）。
+    /// 坑：直接 Union 整个圆盘 = 加凸包而非圆角 ✗（某零件 曾因此体积 +37 800 mm³）；
+    /// 半径受断面限制（圆盘 X 上限 = 角点 + 2r ⇒ 不得越出断面/弧面 ✗，某零件 因此取 r ≤ 2.5）。
     /// </summary>
     public static CsgNode FilletConcave(CsgNode body, double cx, double cy, double r, double length, double sx, double sy)
         => CsgNodes.Union(body, CylinderAlongZ(new Vector3D(cx + sx * r, cy + sy * r, 0), r, length));
@@ -265,7 +265,7 @@ public static class CsgHelpers
     /// <summary>
     /// 圆弧扫掠的**段端点钳制**：每段角范围先按 ±overlap·step 外扩（免段间缝），再**钳制在 [a0, a0+sweep]** ✓。
     /// 返回该段的 (角中点, 段长)。坑：不钳制 ⇒ 首末段端点外扩 ⇒ 实际包角偏大 ✗
-    /// （件5 曾外扩 0.3512 度 ≈ 5.9 mm/端 ⇒ 吃掉 5 mm 预留间隙、与件3 互穿 2892.99 mm³）。
+    /// （某零件 曾外扩 0.3512 度 ≈ 5.9 mm/端 ⇒ 吃掉 5 mm 预留间隙、与某零件 互穿 2892.99 mm³）。
     /// </summary>
     public static (double AMid, double SegLen) ArcSegment(double a0, double sweep, int segments, int i, double radius, double overlap = 0.175)
     {
@@ -278,7 +278,7 @@ public static class CsgHelpers
     /// <summary>
     /// **T∘R**：先绕**局部原点**旋转 `rotationDeg`，**再**平移 ⇒ 与 `Place` 的语义差异见注释。
     /// 坑：`CsgNodes.Transform(t, r, node)` 实测是「**先平移、后绕全局原点旋转**」⇒ 直接用会把零件甩飞 ✗
-    /// （件3 曾因此落位偏 ≈1000 mm；本方法内部拆两次 `Transform` 规避）。
+    /// （某零件 曾因此落位偏 ≈1000 mm；本方法内部拆两次 `Transform` 规避）。
     /// </summary>
     public static CsgNode PlaceRotateThenTranslate(CsgNode body, Vector3D translation, Vector3D rotationDeg)
     {
@@ -287,4 +287,8 @@ public static class CsgHelpers
     }
 }
 }
+
+
+
+
 

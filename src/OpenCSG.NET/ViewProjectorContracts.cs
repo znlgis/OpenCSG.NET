@@ -32,19 +32,19 @@ public sealed class ViewDirection
 }
 
 /// <summary>
-/// 国标第一角三视图方向（GB/T 4458.1 第一角画法），取轴口径 = **甲方图纸口径**：
-/// 落图坐标系为 Z-up，箱体**长轴沿 +Y（汽机侧在 −Y 端）**、宽沿 X、高沿 Z
+/// 国标第一角三视图方向（GB/T 4458.1 第一角画法），取轴口径 = **需求方图纸口径**：
+/// 坐标系为 Z-up：**长轴沿 +Y**、宽沿 X、高沿 Z
 /// （与 <c>CadCsgEvaluator</c> 的落图坐标系、<c>ViewExportBridge</c> 的桥接口径一致）。
 /// <list type="bullet">
 /// <item><b>主视图</b>：观察者在 +X 侧朝 **−X** 看 ⇒ 水平轴 = <b>+Y（箱长）</b>、垂直轴 = +Z（箱高）
-/// —— 与甲方 6-1 主视图逐位一致（8,950 / 9,340 横向、3,890 竖向，**汽机侧在左**、电机侧在右）；</item>
+/// —— 水平方向 = 长轴方向、垂直方向 = 高度方向（观察者在一侧、look 沿 −X）；</item>
 /// <item><b>俯视图</b>：观察者在上方朝 −Z 看，画在主视图**正下方** ⇒ 水平轴 = +Y（与主视**长对正**）、
 /// 垂直轴 = −X（靠近主视图的一侧 = 物体后方 = −X，符合第一角画法）；</item>
 /// <item><b>左视图</b>：观察者在 −Y 侧朝 +Y 看，画在主视图**正右方** ⇒ 水平轴 = +X、垂直轴 = +Z（与主视**高平齐**）。</item>
 /// </list>
 /// <para>
-/// <b>口径变更（2026-10-09）</b>：此前主视图取 <c>look = +Y</c>（观察者朝箱体**端面**看），
-/// 出的是端面立面（3,887 × 4,141）；甲方 6-1/6-3…图纸的主视图画的是**箱体长边立面**（9,340 × 3,890）。
+/// <b>口径变更（202某分图0-09）</b>：此前主视图取 <c>look = +Y</c>（观察者朝箱体**端面**看），
+/// 出的是端面立面；而图纸口径的主视图画的是**长边立面**（即上表口径）。
 /// 本轮按图纸口径改为 <c>look = −X</c>，三视图随之整体重排（俯视仍在主视正下方、左视仍在主视正右方）。
 /// </para>
 /// <para>
@@ -60,7 +60,7 @@ public sealed class ViewDirection
 /// </summary>
 public static class ViewDirections
 {
-    /// <summary>主视图（Front）：观察者 +X 侧，look = −X ⇒ 水平 = +Y（箱长，汽机侧在左）、垂直 = +Z。</summary>
+    /// <summary>主视图（Front）：观察者 +X 侧，look = −X ⇒ 水平 = +Y（长轴）、垂直 = +Z。</summary>
     public static ViewDirection Front { get; } = new(
         "主视", new ViewVector(-1, 0, 0), new ViewVector(0, 1, 0), new ViewVector(0, 0, 1));
 
@@ -184,10 +184,10 @@ public sealed class OrthographicViews
         Views = views;
     }
 
-    /// <summary>内部名（如 "6-6#1"），用于日志与排序。</summary>
+    /// <summary>内部名（如 "某分图#1"），用于日志与排序。</summary>
     public string Name { get; }
 
-    /// <summary>图面标签（如 "6-6 件1 支撑顶板"）。</summary>
+    /// <summary>图面标签（如 "某分图 某零件 支撑顶板"）。</summary>
     public string Label { get; }
 
     /// <summary>三视图（主/俯/左）。</summary>
@@ -210,4 +210,9 @@ public sealed class OrthographicViews
     }
 }
 }
+
+
+
+
+
 

@@ -6,7 +6,7 @@ using System.Collections.Generic;
 
 /// <summary>
 /// 三维点（本模块自有类型，**不依赖 CAD 运行时**，便于离线单测）。
-/// 坐标系与模型一致（GStarCAD Z-up，mm）。
+/// 坐标系与模型一致（某 CAD 宿主 Z-up，mm）。
 /// </summary>
 public readonly struct ViewPoint
 {
@@ -146,4 +146,5 @@ public readonly struct ViewBounds2
     public override string ToString() => $"({MinX:0.###},{MinY:0.###})–({MaxX:0.###},{MaxY:0.###})";
 }
 }
+
 

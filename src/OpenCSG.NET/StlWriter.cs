@@ -75,7 +75,7 @@ public static class StlWriter
         using var writer = new BinaryWriter(stream);
 
         var head = new byte[HeaderLength];
-        var text = header ?? "TurbineCrateCAD STL export";
+        var text = header ?? "调用方 STL export";
         var textBytes = Encoding.ASCII.GetBytes(text);
         Array.Copy(textBytes, head, Math.Min(textBytes.Length, HeaderLength - 1));
         writer.Write(head);
@@ -102,7 +102,7 @@ public static class StlWriter
         using var stream = new FileStream(path, FileMode.Create, FileAccess.Write);
         using var writer = new StreamWriter(stream, new UTF8Encoding(false));
 
-        writer.WriteLine("solid " + (header ?? "TurbineCrateCAD"));
+        writer.WriteLine("solid " + (header ?? "调用方"));
         foreach (var triangle in triangles)
         {
             var normal = NormalOf(triangle);
@@ -115,7 +115,7 @@ public static class StlWriter
             writer.WriteLine("    endloop");
             writer.WriteLine("  endfacet");
         }
-        writer.WriteLine("endsolid " + (header ?? "TurbineCrateCAD"));
+        writer.WriteLine("endsolid " + (header ?? "调用方"));
         writer.Flush();
         return stream.Length;
     }
@@ -153,4 +153,5 @@ public static class StlWriter
             point.X, point.Y, point.Z));
 }
 }
+
 

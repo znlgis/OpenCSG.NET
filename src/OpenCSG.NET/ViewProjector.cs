@@ -17,7 +17,7 @@ using System.Collections.Generic;
 /// <remarks>
 /// 参考实现：znlgis/GStarCad.Net.Demo（MIT，MESHVIEWEXPORT）的 <c>OrthoProjector</c> + <c>DepthBuffer</c>；
 /// 本移植保持其阈值口径（栅格 900、深度容差 = 深度跨度 ×1e-3、每边采样上限 4000），
-/// 仅把输入从 STL 三角形改为本项目 CSG 实体三角化结果，并按视图独立构建栅格（更省内存、无跨视图状态）。
+/// 仅把输入从 STL 三角形改为调用方工程 CSG 实体三角化结果，并按视图独立构建栅格（更省内存、无跨视图状态）。
 /// </remarks>
 public sealed class ViewProjector
 {
@@ -105,7 +105,7 @@ public sealed class ViewProjector
         }
 
         // ④ 圆弧识别 —— **必须在碎片清理之前**：清理的"同可见性共线合并"会把圆弧的短折线压成
-        //    一根根直线段，弧就再也认不出来了（用户实测 2026-10-09：三维里的圆弧落到二维全成折线）。
+        //    一根根直线段，弧就再也认不出来了（用户实测 202某分图0-09：三维里的圆弧落到二维全成折线）。
         //    识别时不分可见性成链（贴着自身面的轮廓常被判成 V-H 交替），弧的可见性由多数票决定。
         var curves = ViewArcFitter.Fit(segments);
 
@@ -338,4 +338,5 @@ public sealed class ViewProjector
     }
 }
 }
+
 
