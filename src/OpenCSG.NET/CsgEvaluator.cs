@@ -24,7 +24,11 @@ namespace Csg
             return node switch
             {
                 BoxNode n => Solids.Cube(n.Size, n.Center),
-                SphereNode n => Solids.Sphere(n.Radius, n.Center),
+                // 球面按弦高容差自适应分段（原先用 SphereOptions.Resolution 默认 12 ⇒ 大球面呈多面体）
+                SphereNode n => Solids.Sphere(new SphereOptions
+                {
+                    Radius = n.Radius, Center = n.Center, Resolution = Tessellation.SegmentsFor(n.Radius)
+                }),
                 CylinderNode n => EvaluateCylinder(n),
                 ConeNode n => EvaluateCone(n),
                 UnionNode n => EvaluateBool(n.Children, (a, b) => a.Union(b)),
@@ -80,7 +84,8 @@ namespace Csg
             return Solids.Cylinder(new CylinderOptions
             {
                 Start = start, End = end,
-                RadiusStart = n.Radius, RadiusEnd = n.Radius
+                RadiusStart = n.Radius, RadiusEnd = n.Radius,
+                Resolution = Tessellation.SegmentsFor(n.Radius),   // 自适应：按弦高容差定分段
             });
         }
 
@@ -103,7 +108,8 @@ namespace Csg
             return Solids.Cylinder(new CylinderOptions
             {
                 Start = start, End = end,
-                RadiusStart = n.BottomRadius, RadiusEnd = n.TopRadius
+                RadiusStart = n.BottomRadius, RadiusEnd = n.TopRadius,
+                Resolution = Tessellation.SegmentsFor(Math.Max(n.TopRadius, n.BottomRadius)),
             });
         }
 
@@ -180,7 +186,8 @@ namespace Csg
                 case CapsuleProfile p:
                 {
                     var pts = new List<Vector2D>();
-                    int segs = 16;
+                    // 胶囊两端的半圆：按弦高容差取分段（原先固定 16 ⇒ 大半径呈折线）
+                    int segs = Tessellation.SegmentsForArc(p.Radius, 180.0);   // 未启用自适应时 = 旧口径 16
                     double r = p.Radius;
                     double halfW = p.RectWidth / 2;
                     for (int i = 0; i <= segs; i++)
