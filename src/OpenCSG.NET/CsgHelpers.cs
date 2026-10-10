@@ -40,7 +40,7 @@ public static class CsgHelpers
     /// <summary>轴线沿 X 的圆柱
     /// 其圆头与吊孔为沿 X 的圆柱）。实现 = 沿 Z 圆柱绕自身中心旋 90° 到 X 轴。</summary>
     /// <summary>
-    /// 带凸耳（吊耳形）的板类轮廓（Y-Z 平面、厚沿 X；多个零件共用）：
+    /// 带凸耳的板类轮廓（Y-Z 平面、厚沿 X；多个零件共用）：
     /// **左直立边 + 顶部 R 圆头 + 与圆头相切的斜边落至右下角 + 底边**，Ø 孔与圆头同轴。
     ///
     /// 相切（图上圆弧与直线无明显过渡）：切线角由几何反解 —— 过底边外端、与"圆心 (zLeft+R, yCenter)、
@@ -117,10 +117,10 @@ public static class CsgHelpers
         double zCenter, double thickness)
         => PrismXY(new[] { (x, y), (x + dx * leg, y), (x, y + dy * leg) }, zCenter, thickness);
     /// <summary>
-    /// 起吊板**斜边角**（度，与水平夹角）：与 <see cref="LugPlate"/> 内斜边**同源**（同一相切二次方程）✓。
+    /// 凸耳板**斜边角**（度，与水平夹角）：与 <see cref="TabbedPlate"/> 内斜边**同源**（同一相切二次方程）✓。
     /// 某零件 的斜边必须用此角 ⇒ 与某零件 斜边**数学上精确平行/重合** ✓（此前用常量近似 ⇒ 亚毫米级发散 ⇒ 缝/相交 ✗）。
     /// </summary>
-    public static double LugPlateSlantAngleDeg(double width, double yBottom, double yCenter, double headRadius)
+    public static double TabbedPlateSlantAngleDeg(double width, double yBottom, double yCenter, double headRadius)
     {
         double yc = yCenter - yBottom;
         double A = yc * yc - headRadius * headRadius;
@@ -137,7 +137,7 @@ public static class CsgHelpers
         return System.Math.Atan2(yT, run) * 180.0 / System.Math.PI;
     }
 
-    public static CsgNode LugPlate(double xCenter, double thickness, double zLeft, double width,
+    public static CsgNode TabbedPlate(double xCenter, double thickness, double zLeft, double width,
         double yBottom, double yCenter, double headRadius, double holeRadius)
     {
         double sz = System.Math.Sign(zLeft);
@@ -287,6 +287,7 @@ public static class CsgHelpers
     }
 }
 }
+
 
 
 
