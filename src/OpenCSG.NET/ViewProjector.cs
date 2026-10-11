@@ -101,6 +101,8 @@ public sealed class ViewProjector
 
             var a2 = new ViewPoint2(a.Dot(view.Right), a.Dot(view.Up));
             var b2 = new ViewPoint2(b.Dot(view.Right), b.Dot(view.Up));
+            // 深度 = p·Look：相机在 −Look 侧 ⇒ 该值随「远离观察者」递增，
+            // 与 DepthRaster 的「每格存最小深度 + IsVisibleAt 判 depth ≤ nearest + bias」配套。
             buffer.Split(a2, b2, a.Dot(view.Look), b.Dot(view.Look), segments);
         }
 
