@@ -1,3 +1,4 @@
+using System.Linq;
 using Csg;
 using Csg.Test;
 using NUnit.Framework;
@@ -56,6 +57,39 @@ namespace Csg.Test
         }
 
         [Test]
+        public void OffCenterBox_ViewScreenRangesRejectMirroredAxes()
+        {
+            // 居中且各轴对称的夹具在镜像下不变（宽高、Min/Max 全都一样），所以检测不出镜像的取轴。
+            // 这里把三个模型轴都偏置，使每个视图的两个屏幕轴范围都不对称：
+            // 任何 Right/Up 的符号翻转都会把某个 Min/Max 翻到另一边。
+            var box = Solids.Cube(new Vector3D(10, 20, 30), new Vector3D(2, 3, 7));
+            var views = ViewBridge.ProjectViews(box, ViewDirections.OrthographicThree);
+
+            var front = views[0];
+            var top = views[1];
+            var left = views[2];
+
+            // 推导（CSG 尺寸 10/20/30 以 (2,3,7) 为中心 ⇒ CSG X∈[−3,7] Y∈[−7,13] Z∈[−8,22]；
+            // CsgMesh 做 Y↔Z 交换 ⇒ 网格 X∈[−3,7] Y∈[−8,22] Z∈[−7,13]）：
+            //   主视 Right=−meshY ⇒ x∈[−22,8]；Up=+meshZ ⇒ y∈[−7,13]
+            //   俯视 Right=−meshY ⇒ x∈[−22,8]；Up=+meshX ⇒ y∈[−3,7]
+            //   左视 Right=−meshX ⇒ x∈[−7,3]； Up=+meshZ ⇒ y∈[−7,13]
+            AssertScreenRange(front, "主视", -22, 8, -7, 13);
+            AssertScreenRange(top, "俯视", -22, 8, -3, 7);
+            AssertScreenRange(left, "左视", -7, 3, -7, 13);
+        }
+
+        static void AssertScreenRange(ViewProjection view, string name,
+            double minX, double maxX, double minY, double maxY)
+        {
+            Assert.That(view.Direction.Name, Is.EqualTo(name));
+            Assert.That(view.Bounds.MinX, Is.EqualTo(minX).Within(Tol), $"{name} 屏幕 X 下限（镜像取轴会把它翻到另一侧）");
+            Assert.That(view.Bounds.MaxX, Is.EqualTo(maxX).Within(Tol), $"{name} 屏幕 X 上限");
+            Assert.That(view.Bounds.MinY, Is.EqualTo(minY).Within(Tol), $"{name} 屏幕 Y 下限");
+            Assert.That(view.Bounds.MaxY, Is.EqualTo(maxY).Within(Tol), $"{name} 屏幕 Y 上限");
+        }
+
+        [Test]
         public void Cube_ProducesVisibleSegments()
         {
             var cube = Solids.Cube(10, center: true);
@@ -65,7 +99,26 @@ namespace Csg.Test
             {
                 Assert.That(view.Segments.Count, Is.GreaterThan(0), $"{view.Direction.Name} 无线段");
                 Assert.That(view.VisibleCount, Is.GreaterThan(0), $"{view.Direction.Name} 无可见线段");
-                Assert.That(view.VisibleCount + view.HiddenCount, Is.EqualTo(view.Segments.Count));
+                // VisibleCount 的权威定义来自线段自身的 IsVisible 标记；
+                // VisibleCount + HiddenCount == Segments.Count 是恒等式（HiddenCount 就是这么定义的），断言它等于没断言。
+                Assert.That(view.VisibleCount, Is.EqualTo(view.Segments.Count(segment => segment.IsVisible)),
+                    $"{view.Direction.Name} 可见计数与逐段可见标记不一致");
+            }
+        }
+
+        [Test]
+        public void OrthographicThree_SatisfyAntiMirrorInvariant()
+        {
+            // ViewProjectorContracts.cs 把 Right × Up == −Look 记为「防镜像」的关键不变量
+            // （(Right, Up, −Look) 构成右手正交基 ⇒ 投影行列式为 +1）。
+            // 三个内置方向的取轴反了就会画出镜像图，但不影响任何宽度/高度断言，故单独钉住。
+            foreach (var direction in ViewDirections.OrthographicThree)
+            {
+                var cross = ViewVector.Cross(direction.Right, direction.Up);
+
+                Assert.That(cross.X, Is.EqualTo(-direction.Look.X).Within(1e-12), $"{direction.Name}: Right × Up 应为 −Look");
+                Assert.That(cross.Y, Is.EqualTo(-direction.Look.Y).Within(1e-12), $"{direction.Name}: Right × Up 应为 −Look");
+                Assert.That(cross.Z, Is.EqualTo(-direction.Look.Z).Within(1e-12), $"{direction.Name}: Right × Up 应为 −Look");
             }
         }
 
