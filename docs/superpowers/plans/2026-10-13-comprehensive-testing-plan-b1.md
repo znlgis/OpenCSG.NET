@@ -3542,6 +3542,35 @@ namespace Csg.Test
                 $"seed={seed}: 二次清理改变了线段数（{once.Count} → {twice.Count}）");
         }
 
+        [Test]
+        [Category("Smoke")]
+        public void Clean_DoesNotMergeAcrossVisibilityLayers()
+        {
+            // `ViewSegGen.Random` 生成的线段集**每块只有一种可见性**，所以「跨可见性不合并」这条守卫
+            // 在随机输入下不可观测 —— Task 5 实测 64 个种子里存在共线且相邻的异可见性对的数量为 **0**。
+            // 单靠随机输入会让人误以为覆盖了这条守卫；这里手工构造一对同线、重叠、一可见一隐藏的线段。
+            var bounds = new ViewBounds2(0, 0, 10, 10);
+            var input = new[]
+            {
+                new ViewSegment(new ViewPoint2(0, 0), new ViewPoint2(6, 0), isVisible: true),
+                new ViewSegment(new ViewPoint2(2, 0), new ViewPoint2(8, 0), isVisible: false),
+            };
+
+            var cleaned = ViewSegmentCleanup.Clean(input, bounds);
+
+            var visible = 0;
+            var hidden = 0;
+            foreach (var segment in cleaned)
+            {
+                if (segment.IsVisible) visible++; else hidden++;
+            }
+
+            Assert.That(visible, Is.GreaterThan(0), "可见层不得被并入隐藏层");
+            Assert.That(hidden, Is.GreaterThan(0), "隐藏层不得被并入可见层");
+            Assert.That(cleaned.Count, Is.EqualTo(2),
+                $"跨可见性的共线重叠段必须保持两条（Clean 的合并带同可见性守卫），实际 {cleaned.Count} 条");
+        }
+
         [TestCaseSource(nameof(SegmentCases))]
         [Category("Smoke")]
         public void Fit_CoversInputWithArcsPlusResidues(long seed)
