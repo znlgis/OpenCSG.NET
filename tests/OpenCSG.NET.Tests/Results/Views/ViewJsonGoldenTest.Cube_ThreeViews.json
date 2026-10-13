@@ -1,0 +1,29 @@
+[
+  {"view":"主视","bounds":[-5,-5,5,5],
+   "segments":[
+    {"a":[-5,5],"b":[-5,-5],"visible":true},
+    {"a":[5,-5],"b":[-5,-5],"visible":true},
+    {"a":[5,-5],"b":[5,5],"visible":true},
+    {"a":[-5,5],"b":[5,5],"visible":true}
+   ],
+   "arcs":[]
+  },
+  {"view":"俯视","bounds":[-5,-5,5,5],
+   "segments":[
+    {"a":[-5,-5],"b":[5,-5],"visible":true},
+    {"a":[-5,5],"b":[5,5],"visible":true},
+    {"a":[-5,-5],"b":[-5,5],"visible":true},
+    {"a":[5,-5],"b":[5,5],"visible":true}
+   ],
+   "arcs":[]
+  },
+  {"view":"左视","bounds":[-5,-5,5,5],
+   "segments":[
+    {"a":[5,5],"b":[5,-5],"visible":true},
+    {"a":[-5,5],"b":[-5,-5],"visible":true},
+    {"a":[5,-5],"b":[-5,-5],"visible":true},
+    {"a":[5,5],"b":[-5,5],"visible":true}
+   ],
+   "arcs":[]
+  }
+]

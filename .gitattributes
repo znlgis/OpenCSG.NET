@@ -1,0 +1,6 @@
+# 行尾固定（L4 HLR JSON golden，Plan D / Task 3）：
+# tests/OpenCSG.NET.Tests/Results/**/*.json 由测试侧 ViewJson.Serialize 以**显式 \n** 生成，
+# 并以 File.ReadAllBytes 逐字节比对（golden 约定 = byte-exact）。
+# 本机 core.autocrlf=true：入库 LF 会在检出时被替换成 CRLF（实测 git checkout-index），
+# 比对随即失败 ⇒ 该子树固定为 LF,入库/检出/跨平台逐字节一致。
+tests/OpenCSG.NET.Tests/Results/**/*.json text eol=lf
