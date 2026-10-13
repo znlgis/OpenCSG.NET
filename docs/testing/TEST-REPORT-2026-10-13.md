@@ -432,3 +432,59 @@ r {1, 5, 20, 100, 500} → {**16, 23, 45, 100, 128**}（单调不减）。
 | `OpenCSG.NET.Tests` | **129 通过 / 0 失败 / 1 NotExecuted**（TRX total=130；不变） |
 | `tests/OpenCSG.NET.Tests/Results/` | 45 个 `.stl`、0 个 `*_.stl`（不变） |
 | 全解决方案构建（`OpenCSG.NET.slnx`，9 工程，`--no-incremental`） | **0 警告 / 0 错误** |
+
+## Plan B1 · Task 10：Tier 3 结构不变量与时间预算（2026-10-13）
+
+Tier 3 结构/单调/幂等不变量落地：`tests/OpenCSG.NET.SystemTests/Property/Tier3StructureTest.cs`（11 个方法 ——
+包围盒覆盖、可见性记账、清理覆盖/幂等/跨层不合并、拟合覆盖/不凭空造几何、共圆合并幂等、拓扑封闭流形、
+焊接确定性与解析真值、凸体无自遮挡）；oracle：`tests/OpenCSG.NET.TestKit/Oracles/HlrAssert.cs`（5 个断言入口）。
+实现按简报的控制器前置修正 C1–C6 执行：Clean 覆盖容差 = `4×minKeep`（与 `Clean` 自身接链容差同口径）；
+Fit 按 `TryBuildArc` 两级契约（链顶点 ≤ tolerance、弦中点 ≤ max(tolerance, 5%R) 矢高判据）；
+可见性记账用调用方给出的手工地面真值（3 可见 + 2 隐藏）；`MergeConcyclic` 幂等用按种子参数化的同圆多块输入
+并带「`once` 非空」反空洞守卫；拓扑用例核对解析真值 V=8 / E=18 / F=12 并改名
+`Topology_CubeWeldIsExactAndDeterministic`。
+
+### 用例与时间预算
+
+| 项 | 值 |
+| --- | --- |
+| Tier 3 用例数（含种子展开） | **197**（6 个种子驱动方法 × 32 + 5 个单例；`--filter "FullyQualifiedName~Tier3StructureTest"` 实测 197 通过 / 0 失败） |
+| SystemTests 总用例数 | **1131**（含 101 个 Explicit/NotExecuted。TRX：total=1131、executed=1030、passed=1030、failed=0、outcome `NotExecuted`×101） |
+| `--filter "TestCategory=Smoke"` 墙钟 | 约 **8.0 秒**（`time` real 7.98 s、运行器自报 6 s；994 用例全过；另一冷样本 10.1 s） |
+| SystemTests 全套件墙钟 | 约 **8.1 秒**（`time` real 8.10 s、运行器自报 6 s；1030 用例全过；另一冷样本 9.1 s） |
+
+时间预算结论：**满足** spec §7 的「SystemTests ≤ 8 分钟」（Smoke+Corpus 两档一体化目标）—— 全套件与 Smoke 档
+实测均在 8–11 秒量级（含 `dotnet test` 进程启动与测试宿主初始化开销），距 8 分钟预算有两个数量级余量；
+**无需**把任何用例移入 nightly（Smoke 档 994 用例 + Corpus 档 36 用例 = 1030）。
+
+### Tier 3 收口验证（Step 6 全量，实测输出）
+
+```text
+$ dotnet test tests/OpenCSG.NET.SystemTests -c Release --filter "FullyQualifiedName~Tier3StructureTest" 2>&1 | tail -4
+已通过! - 失败:     0，通过:   197，已跳过:     0，总计:   197，持续时间: 86 ms - OpenCSG.NET.SystemTests.dll (net8.0)
+
+$ dotnet build OpenCSG.NET.slnx -c Release --no-incremental 2>&1 | tail -6
+已成功生成。
+    0 个警告
+    0 个错误
+
+$ dotnet test tests/OpenCSG.NET.Tests -c Release 2>&1 | tail -3
+已通过! - 失败:     0，通过:   129，已跳过:     0，总计:   129，持续时间: 619 ms - OpenCSG.NET.Tests.dll (net8.0)
+（TRX：total=130、executed=129、passed=129、failed=0、outcome `NotExecuted`×1 —— DEFECT-001 的 `[Explicit]`）
+
+$ dotnet test tests/OpenCSG.NET.SystemTests -c Release --no-build 2>&1 | tail -3
+已通过! - 失败:     0，通过:  1030，已跳过:     0，总计:  1030，持续时间: 10 s - OpenCSG.NET.SystemTests.dll (net8.0)
+
+$ dotnet test tests/OpenCSG.NET.SystemTests -c Release --no-build --filter "TestCategory=Smoke" 2>&1 | tail -4
+已通过! - 失败:     0，通过:   994，已跳过:     0，总计:   994，持续时间: 7 s - OpenCSG.NET.SystemTests.dll (net8.0)
+
+$ ls tests/OpenCSG.NET.Tests/Results/*.stl | wc -l
+45
+$ ls tests/OpenCSG.NET.Tests/Results/*_.stl 2>/dev/null | wc -l
+0
+$ grep -n "<简报 Step 5 的占位符字面量>" docs/testing/TEST-REPORT-2026-10-13.md
+（无匹配 —— 报告至此零占位符残留）
+```
+
+197 个新用例全绿、`OpenCSG.NET.Tests` 与全解决方案构建全绿 ⇒ **未发现新缺陷**（`tests/DEFECTS.md` 最大编号仍为
+DEFECT-004，未登记 005；本任务未动 `src/`）。基线 833 通过 → 收口 1030 通过（833 + 197），`NotExecuted` 101 不变。
