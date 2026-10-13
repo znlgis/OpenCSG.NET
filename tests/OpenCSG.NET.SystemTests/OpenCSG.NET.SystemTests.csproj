@@ -20,6 +20,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\OpenCSG.NET\OpenCSG.NET.csproj" />
     <ProjectReference Include="..\OpenCSG.NET.TestKit\OpenCSG.NET.TestKit.csproj" />
+    <!-- 样例几何（CPurlin）供 L5 集成测试消费；Program.cs 为顶层语句入口，引用 Exe 项目不影响测试程序集入口点。 -->
+    <ProjectReference Include="..\..\samples\Runner.CPurlin\Runner.CPurlin.csproj" />
   </ItemGroup>
 
 </Project>
