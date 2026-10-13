@@ -6,9 +6,21 @@ namespace Csg.Test
     /// <summary>
     /// Tier 5：遮挡夹具的解析区域包含 + 回归钉（与 <c>Tier5OcclusionOracleTest</c> 的逐点射线 oracle 互补）。
     /// <para>
-    /// 本文件每个视图三条断言：①每条 <c>IsVisible == false</c> 线段的 1/4、1/2、3/4 内部采样点
-    /// 必须落在解析推导出的遮挡矩形（外扩 0.05）内 —— 抓「假隐藏」（可见棱边被判成隐藏、且落在
-    /// 遮挡体轮廓之外）；②隐藏总长 <c>sum(H.Length)</c> 的确定性回归钉（±0.05）；③V/H/总线段数一致。
+    /// 本文件每个视图三条断言：①每条 <c>IsVisible == false</c> 线段的两端点与 1/4、1/2、3/4 内部
+    /// 采样点（t ∈ {0, 1/4, 1/2, 3/4, 1}）必须落在解析推导出的遮挡矩形（外扩 0.05）内 —— 它断言的
+    /// 是「隐藏采样点在所断言区域内」；抓「假隐藏」（可见棱边被判成隐藏）的判别力取决于矩形是否
+    /// **严格紧于视图包络**（<c>ViewProjection.Bounds</c> 由线段自身算出，矩形等于/包含包络时
+    /// 任何采样点都在界内、该断言不可能被违反）：本文件只有 <c>BoxesShifted</c> 左视的矩形严格更紧
+    /// （它把后块 h=5 的可见轮廓挡在矩形外），其余三个矩形（LShape 俯视、DrilledPlate 主视/俯视）
+    /// 是所断言区域的漂移守卫，不是假隐藏探测器 —— 假隐藏的判定由 Task 2 的逐点 ray-cast oracle
+    /// 承担；②隐藏总长 <c>sum(H.Length)</c> 的确定性回归钉（±0.05）；③V/H/总线段数一致。
+    /// </para>
+    /// <para>
+    /// 范围仅**线段**：隐藏圆弧（<c>view.Arcs</c> 中 <c>IsVisible == false</c> 的弧；DrilledPlate
+    /// 主视/俯视各有 3 条、合计约 6.8 / 7.8 mm）不在长度钉内，其可见性归 Task 2 的射线 oracle
+    /// （弧域对拍）覆盖。又：本文件多个视图存在隐藏段（虚线）与可见段（实线）共线重叠 ——
+    /// 同一屏线上一段虚、一段实（<c>ViewSegmentCleanup</c> 不跨可见性合并）⇒ 长度钉钉的是
+    /// **管线输出**（含这种重叠分解本身），不是纯制图语义。
     /// </para>
     /// <para>
     /// 矩形一律以**屏幕 (h, v)** 表述（<c>h = p·Right</c>、<c>v = p·Up</c>，取轴见
@@ -16,8 +28,8 @@ namespace Csg.Test
     /// 网格↔CSG Y↔Z 反射（B1 已核实并冻结）——各视图的具体映射写在用例注释里。
     /// </para>
     /// <para>
-    /// 钉值 = 任务书表（控制器实测）经本任务探针 <c>artifacts/b2task3probe</c>（gitignored）逐条复核后的
-    /// 当前代码实测值；属确定性输出，运行不匹配时按失败分类处理、不得直接改数字。
+    /// 钉值 = 任务书表（控制器实测）经逐条复核后的当前代码实测值（各用例内 <c>// 实测 …</c> 即持久
+    /// 记录）；属确定性输出，运行不匹配时按失败分类处理、不得直接改数字。
     /// </para>
     /// </summary>
     [TestFixture]
@@ -39,6 +51,9 @@ namespace Csg.Test
             // ⇒ 前块轮廓：mesh x∈[−2,8] → h∈[−8,2]；mesh z(=CSG y)∈[−5,5] → v∈[−5,5]。
             // 后块被前块遮住的远侧棱边必须落在前块轮廓内（实测两条：(−5,4.986)→(−5,−5)、
             // (1.988,−5)→(−5,−5)，端点 4.986 / 1.988 均在内）。
+            // 判别力（bite）：本矩形是本文件唯一严格紧于视图包络的矩形（包络 bounds h∈[−8,5]，
+            // 矩形把 h 上界截到 2）—— 后块在 h∈(2,5] 的可见轮廓（含 h=5 的整段竖边）落在矩形外，
+            // 故「可见棱边被误判成隐藏」的假隐藏只有本断言抓得住；其余三个矩形是漂移守卫（见类注释）。
             AssertHiddenWithin(view, -8.0, 2.0, -5.0, 5.0, "前块轮廓");
             AssertHiddenLength(view, expected: 16.974); // 实测 16.974063
             AssertCounting(view, expectedVisible: 6, expectedHidden: 2);
@@ -50,16 +65,19 @@ namespace Csg.Test
             var view = ViewNamed(OcclusionFixtures.LShape(), "俯视");
 
             // 区域推导：俯视取轴 h=−mesh_y、v=mesh_x（ViewProjectorContracts:91-94）
-            // ⇒ h 轴 = CSG z（台阶抬升方向）、v 轴 = CSG x（20 长轴）。缺口是沿 CSG z 切掉的
-            // 一半：缺口象限 = (h∈[−5,0] ∧ v∈[0,10])，俯视轮廓 = 全矩形减去该象限（L 形）。
+            // ⇒ h 轴 = CSG z（台阶抬升方向）、v 轴 = CSG x（20 长轴）。缺口象限 = 移除
+            // CSG x>0 ∧ z>0 的角，在 h、v 两个方向各占一半（h∈[−5,0] ∧ v∈[0,10]），
+            // 俯视轮廓 = 全矩形减去该象限（L 形）。
             // 视线沿网格 z = CSG y（棱柱轴）⇒ 远侧(CSG y=−5)棱边被近侧同一截面的材料遮挡，
             // 实测两条隐藏段都在实体自身轮廓上/内：(4.978,−10)→(−5,−10) 是 v=−10 的远侧棱边；
-            // (0,9.978)→(0,−10) 是 CSG z=0 面上的远侧缝（v∈[0,10] 段为缺口底棱、v∈[−10,0] 段为
-            // 远侧面内三角剖分缝），跨满 v 全宽。
-            // 注：任务书给的矩形 [−5,5]×[−10,0]（按「缺口沿 v 轴切、v≤0 半边永不缺料」推导）装不下
-            // 上面第二条 —— 其起点 (0,9.978) 已在矩形外；实际缺口象限 = (h<0 ∧ v>0)（缺口沿 h 轴切）。
-            // 故此处取实体自身轮廓包络 [−5,5]×[−10,10]：棱柱轴视图下矩形能取的最紧界，仍能抓
-            // 「隐藏段越出实体轮廓」的假隐藏（缺口象限内无材料，理论上不可能出现隐藏段）。详见 Task 3 报告。
+            // (0,9.978)→(0,−10) 恒在 h=0（CSG z=0 高度）上、跨满 v 全宽：v∈[0,10] 段为缺口底棱的
+            // 远侧拷贝（CSG y=−5 处），v∈[−10,0] 段为求值器把远侧面（CSG y=−5）分解成两个共面
+            // 四边形（共享 z=0、x∈[−10,0] 边）留下的多边形分解缝 —— 不是几何棱边、也不是三角剖分扇对角线。
+            // 注：任务书给的矩形 [−5,5]×[−10,0]（把遮挡体只当成未缺料的 v≤0 半边 —— 该半边任一 h
+            // 都有材料，故 v 上界只取到 0）装不下上面第二条 —— 其起点 (0,9.978) 已在矩形外。
+            // 故此处取实体自身轮廓包络 [−5,5]×[−10,10]（= 视图包络本身，棱柱轴视图下能取的最紧界）：
+            // 该矩形等于包络 ⇒ 包含断言在本视图不可能抓出假隐藏（任何采样点都在包络内），只作所断言
+            // 区域的漂移守卫；假隐藏的判定由 Task 2 的逐点 ray-cast oracle 承担。详见 Task 3 报告。
             AssertHiddenWithin(view, -5.0, 5.0, -10.0, 10.0, "实体自身轮廓包络");
             AssertHiddenLength(view, expected: 29.956); // 实测 29.955703
             AssertCounting(view, expectedVisible: 6, expectedHidden: 2);
@@ -89,6 +107,8 @@ namespace Csg.Test
             // ⇒ 板截面 = mesh y(=CSG z)∈[−2,2] → h∈[−2,2]；mesh z(=CSG y)∈[−10,10] → v∈[−10,10]。
             // 空腔远侧轮廓（实测 5 条隐藏段：(−2,9.978)→(−2,−10) 是 CSG z=2 面上 CSG x=+10 远侧的长棱，
             // 另 4 条为远侧孔缘碎段，|h| ≤ 2）全在这块「近侧板面轮廓」内。
+            // 该矩形 = 视图包络本身（bounds h[−2,2] v[−10,10]）⇒ 包含断言不可能被违反，仅为所断言
+            // 区域的漂移守卫（同 LShape 俯视）；假隐藏的判定由 Task 2 的逐点 ray-cast oracle 承担。
             AssertHiddenWithin(view, -2.0, 2.0, -10.0, 10.0, "近侧板面轮廓");
             AssertHiddenLength(view, expected: 22.016); // 实测 22.016323
             AssertCounting(view, expectedVisible: 4, expectedHidden: 5);
@@ -103,8 +123,10 @@ namespace Csg.Test
             // 截面 = 厚 4 方向 h∈[−2,2]、20 长轴 v∈[−10,10]；孔（R=3）投影为半径 3 的圆盘，
             // h∈[−3,3] 被板厚裁到 |h| ≤ 2。矩形保守取 h∈[−5,5]（⊇ 板截面 ∪ 孔腔投影 [−3,3]，
             // 见任务书脚注 ②）、v∈[−10,10]：实测 3 条隐藏段为两条远侧孔缘碎段
-            // (1.148,2.772)→(2,2.221) 与 (−2,10)→(−2,−10)（CSG z=2 棱另侧 CSG y=−10 远侧的长棱，
-            // h 恒 = −2），violations=0。
+            // (1.148,2.772)→(1.667,2.494) 与 (1.667,2.494)→(2,2.221)（同一孔缘折线的相邻两段），
+            // 以及远侧长棱 (−2,10)→(−2,−10)（CSG z=2 面与 CSG y=−10 侧面的交线，h 恒 = −2）。
+            // 该矩形 ⊇ 视图包络（bounds h[−2,2] v[−10,10]）⇒ 包含断言不可能被违反，仅为所断言区域
+            // 的漂移守卫（同 LShape 俯视/DrilledPlate 主视）；假隐藏的判定由 Task 2 的 ray-cast oracle 承担。
             AssertHiddenWithin(view, -5.0, 5.0, -10.0, 10.0, "板面∪孔腔轮廓（保守）");
             AssertHiddenLength(view, expected: 21.019); // 实测 21.01926
             AssertCounting(view, expectedVisible: 4, expectedHidden: 3);
@@ -122,7 +144,8 @@ namespace Csg.Test
         }
 
         /// <summary>
-        /// 每条隐藏段取 1/4、1/2、3/4 三个内部采样点，断言落在 [minH−0.05, maxH+0.05] × [minV−0.05, maxV+0.05] 内。
+        /// 每条隐藏段取两端点（t=0、1）与 1/4、1/2、3/4 三个内部采样点，共 5 点，
+        /// 断言落在 [minH−0.05, maxH+0.05] × [minV−0.05, maxV+0.05] 内。
         /// </summary>
         static void AssertHiddenWithin(
             ViewProjection view, double minH, double maxH, double minV, double maxV, string label)
@@ -134,7 +157,7 @@ namespace Csg.Test
                 index++;
                 if (segment.IsVisible) continue;
                 hidden++;
-                for (var k = 1; k <= 3; k++)
+                for (var k = 0; k <= 4; k++)
                 {
                     var t = k / 4.0;
                     var h = segment.Start.X + (segment.End.X - segment.Start.X) * t;
@@ -154,7 +177,11 @@ namespace Csg.Test
                 $"{view.Direction.Name}/{label}：该视图零隐藏段，区域包含断言空转");
         }
 
-        /// <summary>隐藏总长钉：sum(H.Length) == expected ± 0.05（确定性实测值）。</summary>
+        /// <summary>
+        /// 隐藏总长钉：sum(H.Length) == expected ± 0.05（确定性实测值）。
+        /// 仅覆盖线段：隐藏圆弧（<c>view.Arcs</c> 中 <c>IsVisible == false</c>；DrilledPlate
+        /// 主视/俯视各有 3 条）不在内，其可见性归 Task 2 的射线 oracle（弧域对拍）覆盖。
+        /// </summary>
         static void AssertHiddenLength(ViewProjection view, double expected)
         {
             var hiddenLen = 0.0;
@@ -172,13 +199,19 @@ namespace Csg.Test
                 + $"钉值 {expected}±{LengthTolerance}");
         }
 
-        /// <summary>计数一致性：V、H 各自对齐钉值，且 V + H == Segments.Count。</summary>
+        /// <summary>
+        /// 计数一致性：V、H 各自对齐钉值，且 V + H == Segments.Count。
+        /// 注：第三式按定义恒真（<c>HiddenCount =&gt; Segments.Count − VisibleCount</c>，
+        /// ViewProjectorContracts.cs:197）—— 有意义的是前两式的 V/H 钉；第三式保留仅为显式表达
+        /// 「段数 = V + H」。
+        /// </summary>
         static void AssertCounting(ViewProjection view, int expectedVisible, int expectedHidden)
         {
             Assert.That(view.VisibleCount, Is.EqualTo(expectedVisible),
                 $"{view.Direction.Name}：VisibleCount 实测 {view.VisibleCount}");
             Assert.That(view.HiddenCount, Is.EqualTo(expectedHidden),
                 $"{view.Direction.Name}：HiddenCount 实测 {view.HiddenCount}");
+            // 恒等式：按 HiddenCount 定义恒真，无独立判别力（判别力在前两条 V/H 钉）。
             Assert.That(view.Segments.Count, Is.EqualTo(expectedVisible + expectedHidden),
                 $"{view.Direction.Name}：Segments.Count 实测 {view.Segments.Count}，应 = V+H "
                 + $"= {expectedVisible + expectedHidden}");
