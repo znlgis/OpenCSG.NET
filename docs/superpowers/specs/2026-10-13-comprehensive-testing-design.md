@@ -325,9 +325,12 @@ sample 是顶层语句 console app，几何代码无法被测试项目引用。L
 
 ### Plan D（golden + 集成）
 
-- 加 JSON golden **之前**必须先扩门禁：`GoldenGuard.FindPendingGoldens` 只扫顶层 `*.stl`，`promote-goldens.sh` 只 glob `"$results"/*_.stl`，而 Tier 4 要引入 `Results/Views/{fixture}.{test}.json`。先扩谓词/脚本或加平行 JSON 门禁，否则那些 golden 无人看守、无法升级。
-- `promote-goldens.sh` 补 `--yes` 文档与升级前的内容摘要 —— 约 30 个 golden 会经它升级，否则等于盲升。
-- `[SetUpFixture]` 目前只覆盖 `Csg.Test` 命名空间；若出现第二个命名空间根或第二个写 golden 的程序集，改程序集级。
+> **已完成（Plan D，2026-10-14）**：以下三项全部落地 + L4（15 STL + 15 JSON 基线；既有 45 STL 逐字节不变）+ L5（36 集成用例：全管线贯通 / STL 与 JSON 闭环 / 凸包 oracle 成立表 / CPurlin 真实模型）+ 样例侧（CpurlinModel 抽取、字节级不变；OPENCSG_OPEN_VIEWER 守卫）。**新缺陷 DEFECT-008**（TabbedPlate 浅斜角肩部欠覆盖）与 **DEFECT-009**（Bounds 忽略弧）。细节见 `docs/testing/TEST-REPORT-2026-10-13.md` 的「Plan D」节。
+> **遗留（后续计划）**：`Runner.Examples` 的 `Process.Start` 无守卫；D2 字节级 STL 基线在 autocrlf=false 克隆上会失配（写出器 `Environment.NewLine`；需决策 `.gitattributes`/写出器口径）；DEFECT-009 修复后的 JSON golden 重基线化。
+
+- 加 JSON golden **之前**必须先扩门禁：`GoldenGuard.FindPendingGoldens` 只扫顶层 `*.stl`，`promote-goldens.sh` 只 glob `"$results"/*_.stl`，而 Tier 4 要引入 `Results/Views/{fixture}.{test}.json`。先扩谓词/脚本或加平行 JSON 门禁，否则那些 golden 无人看守、无法升级。 ✅ 已扩展（且评审发现并修正了首轮实现只扫顶层的缺口——现为**递归**扫描 `Results/**`，含 `.gitignore`/`.gitattributes` 配套；负向控制实测红）。
+- `promote-goldens.sh` 补 `--yes` 文档与升级前的内容摘要 —— 约 30 个 golden 会经它升级，否则等于盲升。 ✅ 已补（递归收集、逐文件字节数+内容摘要、`--yes` 文档化；D2/D3 共 30 个新基线经其升级）。
+- `[SetUpFixture]` 目前只覆盖 `Csg.Test` 命名空间；若出现第二个命名空间根或第二个写 golden 的程序集，改程序集级。 ✅ 无需改造（JSON golden 写在同一 Tests 程序集同一命名空间下；若将来出现第二写 golden 程序集再按预案处理——已在计划中记录该判据）。
 
 ### Plan F（覆盖率 + CI + 报告定稿）
 

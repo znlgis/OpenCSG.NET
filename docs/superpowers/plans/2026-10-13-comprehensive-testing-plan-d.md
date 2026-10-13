@@ -87,8 +87,12 @@
 
 ## 完成定义（Plan D）
 
-- [ ] 门禁覆盖 `.stl` 与 `.json` 两类残留；`promote-goldens.sh` 文档化 `--yes` 且升级前打印摘要。
-- [ ] L4：新模块 STL 基线 + HLR JSON 基线（~30 条）经 `--yes` 升级入库；**既有 45 STL 逐字节不变**；JSON 序列化器两次运行逐字节稳定。
-- [ ] L5：管线等价、STL 闭环、JSON 闭环、凸包 oracle、CPurlin（bounds 152/64/1000 + 冲孔）落地。
-- [ ] `CpurlinModel` 抽取完成；`Process.Start` 默认不打开（`OPENCSG_OPEN_VIEWER` 门控）；slnx 0/0。
-- [ ] 全量测试全绿、`Results/` 零 `_.stl`/`_.json` 残留；`src/` 零改动。
+**状态：已全部完成（2026-10-14，分支 `test/comprehensive-suite-plan-d`，10 commits）。** 逐项核对：
+
+- [x] 门禁**递归**覆盖 `.stl` 与 `.json` 两类残留（含子目录）；`promote-goldens.sh` 文档化 `--yes` 且升级前打印摘要（含空格安全 / `find -print0`）。首轮实现只扫顶层的缺口由评审抓获并在修正轮修复（红/绿实测）。
+- [x] L4：15 条新模块 STL 基线 + 15 条 HLR JSON 基线经 `--yes` 升级入库；**既有 45 STL 逐字节不变**（sha256 + git blob 双重对照）；JSON 序列化器两次运行逐字节稳定 + 判别力自证。
+- [x] L5：管线贯通（逐位一致 + 确定性 + 非空钉）、STL 闭环（实测容差 + 独立射线 oracle 在回读管线上全过）、JSON 闭环（Within(0)）、凸包 oracle 成立表（含不成立记录与缺陷引用）、CPurlin（bounds 1000×152 / 1000×64 / 64×152 + 冲孔去对照验证）——36 用例全绿。
+- [x] `CpurlinModel` 抽取完成（STL 输出字节级不变，评审独立复现）；`Process.Start` 默认不打开（`OPENCSG_OPEN_VIEWER == "1"` 门控）；slnx 0/0。
+- [x] 全量测试全绿（Tests 342/0；SystemTests 1093/0/160）、`Results/` 零 `_.stl`/`_.json` 残留；`src/` 零改动；新缺陷 DEFECT-008/009 已登记 + `[Explicit]` 复现。
+
+> 逐任务评审/fix round/核对记录与遗留观察项见 `.superpowers/sdd/2026-10-13-comprehensive-testing-plan-d/progress.md`。

@@ -652,3 +652,80 @@ $ ls tests/OpenCSG.NET.Tests/Results/*_.stl 2>/dev/null | wc -l
 - **SystemTests 单次偶发失败（未复现）**：T7 提交后的一次全量运行读 1056/1057（失败用例名未捕获——当时未开 TRX），随后 **26 次连续复跑全绿**。列为 Plan E（稳健性/并行）的 soak 观察项。
 - **T8 审查遗留（Minor）**：`CsgHelpersTest` 的斜面探测按 Polygons 顺序取首个匹配（重排敏感）；`CylinderAlongX`/`RevolvedStack` 用 5% 解析带宽而可给精确 12 边形离散值；`Formats` 写 `Plane.Normal` 不重算的差异未被非绕序一致面钉住；`ToString` 数字断言偏松。
 - **覆盖率分析脚本（gitignored）**：`planCtask8cov/analyze8.py` 的目标匹配器有笔误（65 条假 NOT FOUND），结论已由评审独立复核；后续引用前需修。
+
+## Plan D — L4 Golden + L5 集成端到端（2026-10-14）
+
+承接 spec §13「Plan D」与阶段表第 5 阶段。本计划含**样例侧改动**（`samples/`，spec 授权）与**门禁扩展**（`GoldenGuard.cs` 在 Plan D 由 spec 解除冻结）。
+
+### Golden 资产（L4）
+
+| 项 | Plan D 开工 | 收口 |
+| --- | --- | --- |
+| `Results/*.stl`（SolidTest 既有 45 + L4 新 15） | 45 | **60**（**既有 45 逐字节不变**：D2/D3 两次 `sha256sum` + git blob 对照，`comm -23` 为空） |
+| `Results/Views/*.json`（HLR 三视图基线） | 0 | **15**（965,792 B；`ViewJson.Serialize` 稳定序列化器：固定字段序、InvariantCulture `"R"`、显式 `\n`；双序列化字节一致 + 判别力自证（改一位数字 ⇒ 红）） |
+| pending 残留 | 0 | **0** |
+
+L4 新模块 STL 基线：PrismXY_Hexagon/NonConvexL、PrismXZ_Triangle、CornerCut_Plate、CornerWedge_RightPrism、TabbedPlate_Default、TabbedPlateSlantAngle_Deg71、FilletConcave_InnerCorner、RoundConvexCorner_Outer、SectorCylinder_90/270（A2 语义）、OrientedCube/Sphere_Custom、Tessellation_Default/TightTolerance（**含 DEFECT-008 的发现路径**——简报原拟 Deg10，实测暴露肩部欠覆盖后改用文档化参数域并登记缺陷）。
+
+### 门禁与脚本扩展
+
+- `GoldenGuard.FindPendingGoldens`：**递归**扫描 `Results/**`，同时回收 `_.stl` 与 `_.json`（显式后缀过滤保留 8.3 短名规避）；失败消息列相对路径。
+- `tools/promote-goldens.sh`：递归收集（`find -print0`，含空格安全）、升级前逐文件摘要（字节数 + JSON 首行/ STL 前 8 字节 hex + 三角形数）、头部文档化 `--yes`。
+- 根 `.gitattributes`：`tests/OpenCSG.NET.Tests/Results/**/*.json text eol=lf`（autocrlf=true 下检出把 LF 变 CRLF 会破坏 byte-exact 比对；评审正/负对照实测确认必要性）。
+- `.gitignore`：`tests/**/Results/**/*_.stl|_.json`（含嵌套）。
+
+### L5 集成端到端（36 用例，`tests/OpenCSG.NET.SystemTests/Integration/`）
+
+- **全管线贯通**：节点求值路径 vs 图元构造路径**逐位一致**（多边形/体积/三角形/三视图端点偏差全 0）；同树二次求值/投影确定性（0 偏差）。比较类用例已补非空钉（体积 6000/4607.999…、段数整数等）。
+- **STL 闭环**：整数夹具往返零偏差；DrilledPlate 存储误差 1.02e-7（bin）/4.71e-7（ascii）、端点 ≤9.96e-8/5.0e-7 ⇒ 容差 1e-6/2e-6（有实测依据）。**独立射线 oracle 在回读管线上全过**（轴对齐夹具）——库内唯一读入器与两个写出器打通。DrilledPlate 左视按 DEFECT-004②/005 记录排除（325→338/319 段，含弱拓扑钉）。
+- **JSON 闭环**：深度 16 树（JSON 嵌套 50 < 64，避 DEFECT-007 域）往返 `Within(0)`（296 多边形/533 三角形）。
+- **凸包周长 oracle**：成立表 = Cube×3、Box×3、PrismXY 轴向（六边形 60=60、五边形比值 1.0）；不成立记录 = 棱柱横截视图（比值 1.037–1.211，几何前提）、圆柱轴向（DEFECT-004/009：Segments=0、R=8、330°）、球（2.13–2.52）。
+- **CPurlin 真实模型**：轴映射推导+实测 = 主视 1000×152 / 俯视 1000×64 / 左视 64×152（±0.5）；冲孔可观察量经**去冲孔对照探针**证明洞相关（前视 r≈9 弧×2、筒形弦×2、Z=105 盖片 ≥3、俯视环片 ≥2——无冲孔时全为 0）；Build 53 ms / 投影 35 ms（无需 Corpus 归类）。
+- 负向控制 ×3（收紧容差/翻孔号/放宽横截上界）全部按预期变红后还原。
+
+### 样例侧
+
+- `CpurlinModel` 抽取（`public static Build()` + 公开常量）——**STL 输出字节级不变**（`caf87d19…`/`3a6f4517…` 前后 `cmp` 一致，评审独立复现）。
+- `Process.Start` 查看器改为 `OPENCSG_OPEN_VIEWER == "1"` 门控（默认不打开，CI/无头安全）；SystemTests 已引用样例工程（Exe 作库，构建 0/0 无冲突）。
+
+### DEFECTS.md 变更（本计划）
+
+- **新增 DEFECT-008**（中）：`CsgHelpers.TabbedPlate` 浅斜角（θ<30° ⇔ w > 3R+√3·yc）肩部欠覆盖——残留平台 y=298.4805 + 竖壁 z=67.3661、体积 +23,667.62 mm³（评审独立探针复现到 4 位小数）。修复方向：肩部 z 跨度 zT→R（一行）。
+- **新增 DEFECT-009**（中）：`ViewProjection.Bounds` 忽略 `Arcs`——全弧视图（圆柱/球/孔位轴向视图）返回 `(0,0,0,0)`（=「无几何」哨兵）；`OrthographicViews.Bounds` 聚合与 TestKit `HlrAssert.AssertBoundsCoverSegments`（对全弧视图退化为空断言）被误导。修复后需按预期重基线化受影响 JSON golden。
+
+### 用例与时间预算
+
+| 项 | 值 |
+| --- | --- |
+| 本计划新增用例 | Tests +40（门禁 3+2、L4 STL 15、JSON 15+4、D8/D9 复现 ~4）+ SystemTests +36（L5） |
+| Tests（收口） | **342 通过 / 0 失败**（另 7 个 Explicit 不计入） |
+| SystemTests（收口） | **1093 通过 / 0 失败 / 160 NotExecuted**（1057 → +36） |
+| 墙钟 | Tests ~2.9 s；SystemTests ~11.6 s（≪ 8 分钟） |
+
+### 收口验证（全量，实测输出）
+
+```text
+$ dotnet build OpenCSG.NET.slnx -c Release --no-incremental 2>&1 | tail -3
+    0 个错误
+
+$ dotnet test tests/OpenCSG.NET.Tests -c Release --no-build 2>&1 | tail -2
+已通过! - 失败:     0，通过:   342，已跳过:     0，总计:   342，持续时间: 1 s - OpenCSG.NET.Tests.dll (net8.0)
+
+$ dotnet test tests/OpenCSG.NET.SystemTests -c Release --no-build 2>&1 | tail -2
+已通过! - 失败:     0，通过:  1093，已跳过:     0，总计:  1093，持续时间: 10 s - OpenCSG.NET.SystemTests.dll (net8.0)
+
+$ ls tests/OpenCSG.NET.Tests/Results/*.stl | wc -l
+60
+$ ls tests/OpenCSG.NET.Tests/Results/Views/*.json | wc -l
+15
+$ find tests/OpenCSG.NET.Tests/Results -name '*_.stl' -o -name '*_.json' | wc -l
+0
+```
+
+`src/` 零改动；缺陷册开放 9 条（001–009）+ 已修复 3 条（A1/A2/A4），双向索引由 `DefectRegistryTest` 强制。
+
+### 观察项（未闭合，供后续计划）
+
+- **`Runner.Examples` 的 `Process.Start` 未加环境守卫**（D4 审查指出；本计划范围仅 CPurlin）——Plan E/F 或样例清理时处理。
+- **D2 字节级 STL 基线在 autocrlf=false 的 Windows 克隆上会失配**（`ToStlString` 走 `Environment.NewLine`）——`ModuleBaselineGoldenTest` 注释已披露；稳健方案（写出器显式 `\n`）属后续决策。租用清单：D3 审查建议给 `.stl` 基线也做 `.gitattributes` 或改写出器。
+- **DEFECT-009 修复后的 golden 重基线化**是预期动作（Cylinder_ThreeViews 等）。
