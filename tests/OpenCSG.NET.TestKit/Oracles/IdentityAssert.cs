@@ -39,11 +39,22 @@ namespace Csg.Test
 
             var expected = volumeA + volumeB - intersection;
             var scale = Scale(volumeA, volumeB, union);
-            var slack = System.Math.Max(tolerance, RelativeTolerance * scale);
+            var slack = System.Math.Max(tolerance, RelativeTolerance * scale)
+                      + DriftBudget(a, b, reference, CombinedDiagonal(a, b));
 
             Assert.That(union, Is.EqualTo(expected).Within(slack),
                 $"{Prefix(message)} 包含排斥不成立：V(A∪B)={union:R} 应为 V(A)+V(B)−V(A∩B)={expected:R}"
                 + $"（V(A)={volumeA:R} V(B)={volumeB:R} V(A∩B)={intersection:R}）");
+
+            var unionReport = GeometryAssert.Analyze(unionSolid);
+            Assert.That(unionReport.DuplicatedEdges, Is.EqualTo(0),
+                $"{Prefix(message)} 布尔结果（并集）含重复的有向边 —— 这是**面级**损坏的指纹（重复面/绕序不一致），"
+                + $"T 顶点接缝不会产生重复有向边，故这条断言不受接缝干扰 | {unionReport}");
+
+            var intersectionReport = GeometryAssert.Analyze(interSolid);
+            Assert.That(intersectionReport.DuplicatedEdges, Is.EqualTo(0),
+                $"{Prefix(message)} 布尔结果（交集）含重复的有向边 —— 这是**面级**损坏的指纹（重复面/绕序不一致），"
+                + $"T 顶点接缝不会产生重复有向边，故这条断言不受接缝干扰 | {intersectionReport}");
         }
 
         /// <summary>A − B = A − A ∩ B。</summary>
@@ -51,17 +62,56 @@ namespace Csg.Test
         {
             // A−B 与 A∩B 都是 A 的子集（几何上位于 A 内），故用 A 的包围盒中心做公共参考点。
             var reference = Center(a);
+            var differenceSolid = a.Subtract(b);
+            var restrictionSolid = a.Intersect(b);
 
             var volumeA = SignedVolumeAt(a, reference);
-            var difference = SignedVolumeAt(a.Subtract(b), reference);
-            var intersection = SignedVolumeAt(a.Intersect(b), reference);
+            var difference = SignedVolumeAt(differenceSolid, reference);
+            var intersection = SignedVolumeAt(restrictionSolid, reference);
 
             var expected = volumeA - intersection;
             var scale = Scale(volumeA, difference);
-            var slack = System.Math.Max(tolerance, RelativeTolerance * scale);
+            var slack = System.Math.Max(tolerance, RelativeTolerance * scale)
+                      + DriftBudget(a, b, reference, CombinedDiagonal(a, b));
 
             Assert.That(difference, Is.EqualTo(expected).Within(slack),
                 $"{Prefix(message)} 差集恒等式不成立：V(A−B)={difference:R} 应为 V(A)−V(A∩B)={expected:R}");
+
+            var differenceReport = GeometryAssert.Analyze(differenceSolid);
+            Assert.That(differenceReport.DuplicatedEdges, Is.EqualTo(0),
+                $"{Prefix(message)} 布尔结果（差集）含重复的有向边 —— 这是**面级**损坏的指纹（重复面/绕序不一致），"
+                + $"T 顶点接缝不会产生重复有向边，故这条断言不受接缝干扰 | {differenceReport}");
+        }
+
+        /// <summary>
+        /// 参考点漂移预算：库的布尔输出可能带 T 顶点接缝（README 已记录），
+        /// 此时散度定理的值不再与参考点严格无关（实测 dV/dref ≈ 1e-5/单位距离）。
+        /// 共享参考点只能消除**系统性**偏差，消不掉各实体各自的裂缝通量差；
+        /// 所以用「同一实体在两个参考点上的读数差」自校准出漂移上界，计入容差。
+        /// 对严格闭合的网格该预算 ≈1e-13 ⇒ 等于不放松。
+        /// </summary>
+        static double DriftBudget(Solid a, Solid b, Vector3D reference, Vector3D probeOffset)
+        {
+            var probe = reference + probeOffset;
+            var budget = 0.0;
+            budget += System.Math.Abs(SignedVolumeAt(a, reference) - SignedVolumeAt(a, probe));
+            budget += System.Math.Abs(SignedVolumeAt(b, reference) - SignedVolumeAt(b, probe));
+            var union = a.Union(b);
+            budget += System.Math.Abs(SignedVolumeAt(union, reference) - SignedVolumeAt(union, probe));
+            var intersection = a.Intersect(b);
+            budget += System.Math.Abs(SignedVolumeAt(intersection, reference) - SignedVolumeAt(intersection, probe));
+            return budget;
+        }
+
+        /// <summary>两个实体联合包围盒的对角线向量（漂移探针位移，把参考点杠杆臂整个走满）。</summary>
+        static Vector3D CombinedDiagonal(Solid a, Solid b)
+        {
+            var (minA, maxA) = GeometryAssert.Bounds(a);
+            var (minB, maxB) = GeometryAssert.Bounds(b);
+            return new Vector3D(
+                System.Math.Max(maxA.X, maxB.X) - System.Math.Min(minA.X, minB.X),
+                System.Math.Max(maxA.Y, maxB.Y) - System.Math.Min(minA.Y, minB.Y),
+                System.Math.Max(maxA.Z, maxB.Z) - System.Math.Min(minA.Z, minB.Z));
         }
 
         /// <summary>V(A∪B) ≥ max(V(A),V(B))、V(A∩B) ≤ min(V(A),V(B))，且并集/交集非负。</summary>

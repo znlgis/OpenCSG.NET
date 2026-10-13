@@ -358,5 +358,5 @@ Normal 档 40 个种子全部通过，A∩A/A−A/差集恒等式全部通过 �
 归因（探针 `artifacts/task8probe fscheck`）：T 顶点接缝实体的体积读数随参考点线性漂移，并集实测 `dV_U/dref = (0, 1.00e-5, 0)`，
 残差 ≈ 裂缝面积(1.0e-5) × 参考点距裂缝距离(~75 单位) ≈ 7.5e-4；同一操作数换序 `B∪A` 无漂移（1e-12 量级），
 A、B 与交集自身严格闭合（singleUse=0），并集输出无重复面、无退化面，隐含裂缝宽度 = |g|/总边长 = 6.1e-9，
-低于库容差 1e-5 五个数量级。⇒ 判为 **oracle 精度/参考点课题（Task 7 已记录过的 class (ii)）**，不是 DEFECT-003
+比库容差 1e-5 约低 1600 倍（约 3 个数量级）。⇒ 判为 **oracle 精度/参考点课题（Task 7 已记录过的 class (ii)）**，不是 DEFECT-003
 （Normal 档、无重复面），也**未登记新缺陷**；修复涉及 Task 7 的冻结文件（`Tier1BooleanIdentityTest.cs`），交 controller 决定。
