@@ -151,7 +151,7 @@ namespace Csg.Test
         }
 
         /// <summary>严格封闭定向流形断言（图元与多数布尔结果应满足）。</summary>
-        public static void AssertClosedOrientedManifold(Solid solid, string message = null)
+        public static void AssertClosedOrientedManifold(Solid solid, string? message = null)
         {
             var report = Analyze(solid);
             Assert.That(report.NonManifoldEdges, Is.EqualTo(0),
@@ -169,7 +169,7 @@ namespace Csg.Test
         /// 无同向重复边（绕序一致）、无零长边、无退化多边形。
         /// 注意本断言不检测「面积缺失型漏洞」——那由体积恒等式（A∪B = A+B−A∩B）在用例中把关。
         /// </summary>
-        public static void AssertOrientationConsistent(Solid solid, string message = null)
+        public static void AssertOrientationConsistent(Solid solid, string? message = null)
         {
             var report = Analyze(solid);
             Assert.That(report.DuplicatedEdges, Is.EqualTo(0),
@@ -181,7 +181,7 @@ namespace Csg.Test
         }
 
         /// <summary>每个多边形的 Plane 必须与顶点绕序同向、且平面过其顶点。</summary>
-        public static void AssertPlanesMatchWinding(Solid solid, string message = null)
+        public static void AssertPlanesMatchWinding(Solid solid, string? message = null)
         {
             var scale = Math.Max(1.0, MaxAbsCoordinate(solid));
             foreach (var polygon in solid.Polygons)
@@ -210,14 +210,14 @@ namespace Csg.Test
             }
         }
 
-        public static void AssertVolume(Solid solid, double expected, double tolerance, string message = null)
+        public static void AssertVolume(Solid solid, double expected, double tolerance, string? message = null)
         {
             var actual = SignedVolume(solid);
             Assert.That(actual, Is.EqualTo(expected).Within(tolerance),
                 $"{Describe(message)}: 净体积 {actual:R} != 期望 {expected:R}（法线朝外时为正；负值说明整体绕序反转）");
         }
 
-        public static void AssertBounds(Solid solid, Vector3D expectedMin, Vector3D expectedMax, double tolerance, string message = null)
+        public static void AssertBounds(Solid solid, Vector3D expectedMin, Vector3D expectedMax, double tolerance, string? message = null)
         {
             var (min, max) = Bounds(solid);
             Assert.That(min.X, Is.EqualTo(expectedMin.X).Within(tolerance), $"{Describe(message)}: bbox.Min.X");
@@ -248,7 +248,7 @@ namespace Csg.Test
         }
 
         /// <summary>整个实体的不变量组合断言（封闭 + 定向 + 平面自洽）。</summary>
-        public static void AssertSolidInvariants(Solid solid, string message = null)
+        public static void AssertSolidInvariants(Solid solid, string? message = null)
         {
             AssertClosedOrientedManifold(solid, message);
             AssertPlanesMatchWinding(solid, message);
@@ -358,7 +358,7 @@ namespace Csg.Test
             return max;
         }
 
-        static string Describe(string message) => message ?? "solid";
+        static string Describe(string? message) => message ?? "solid";
 
         static double Dot(Vector3D a, Vector3D b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
 
