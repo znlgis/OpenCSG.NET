@@ -143,6 +143,8 @@ namespace Csg.Test
                         new Vector3D(0, 0, 0), spec.RadiusEnd, spec.Radius, spec.Height));
 
                 case PrimitiveKind.Extrude:
+                    if (spec.Profile == ProfileKind.SquareTube)
+                        return BuildSquareTube(spec);
                     return CsgEvaluator.Evaluate(CsgNodes.Extrude(
                         BuildProfile(spec.Profile, spec), spec.Height));
 
@@ -155,6 +157,33 @@ namespace Csg.Test
             }
         }
 
+        /// <summary>
+        /// 方管必须手工用「外轮廓 − 内轮廓」构造，不能走 <see cref="Profiles.SquareTube"/>：
+        /// 该工厂的 Thickness 参数被库内的 ExpandProfile 忽略（只产出外轮廓），
+        /// 结果与同尺寸的 <see cref="Profiles.Rectangle"/> 展开成完全相同的 4 个点 ——
+        /// 那样 7 种截面实际只有 6 种，而语料会按 Profile 打标签、谎报覆盖。
+        /// </summary>
+        static Solid BuildSquareTube(SolidSpec spec)
+        {
+            var thickness = Math.Max(Math.Min(spec.SizeX, spec.SizeY) / 10.0, 1e-3);
+            var innerX = spec.SizeX - 2 * thickness;
+            var innerY = spec.SizeY - 2 * thickness;
+
+            var outer = CsgEvaluator.Evaluate(
+                CsgNodes.Extrude(Profiles.Rectangle(spec.SizeX, spec.SizeY), spec.Height));
+
+            if (innerX <= 0 || innerY <= 0)
+                return outer;   // 壁厚吃满：退化成实心块，仍是有效实体
+
+            // 内轮廓沿 +Z 两端各出头一点，避免与外面在 Z=0/Height 共面导致布尔退化
+            var overshoot = Math.Max(spec.Height * 0.01, 1e-6);
+            var inner = CsgEvaluator.Evaluate(
+                    CsgNodes.Extrude(Profiles.Rectangle(innerX, innerY), spec.Height + 2 * overshoot))
+                .Translate(0, 0, -overshoot);
+
+            return outer.Subtract(inner);
+        }
+
         static Profile2D BuildProfile(ProfileKind kind, SolidSpec spec)
         {
             switch (kind)
@@ -164,6 +193,7 @@ namespace Csg.Test
                     Math.Max(spec.SizeX / 10, 1e-3), Math.Max(spec.SizeY / 10, 1e-3));
                 case ProfileKind.Channel: return Profiles.Channel(spec.SizeY, spec.SizeX,
                     Math.Max(spec.SizeX / 10, 1e-3), Math.Max(spec.SizeY / 10, 1e-3));
+                // SquareTube 只产出外轮廓（Thickness 被忽略）；真正空心方管走 BuildSquareTube
                 case ProfileKind.SquareTube: return Profiles.SquareTube(spec.SizeX, spec.SizeY,
                     Math.Max(Math.Min(spec.SizeX, spec.SizeY) / 10, 1e-3));
                 case ProfileKind.Trapezoid: return Profiles.Trapezoid(spec.SizeX / 2, spec.SizeX, spec.SizeY);

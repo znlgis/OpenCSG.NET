@@ -81,18 +81,82 @@ namespace Csg.Test
         }
 
         [Test]
+        public void Materialize_SquareTube_IsHollowUnlikeRectangle()
+        {
+            var baseline = SolidGen.Random(42, CoordTier.Normal);
+
+            var rectangle = SolidGen.Materialize(baseline with
+            { Kind = PrimitiveKind.Extrude, Profile = ProfileKind.Rectangle });
+            var tube = SolidGen.Materialize(baseline with
+            { Kind = PrimitiveKind.Extrude, Profile = ProfileKind.SquareTube });
+
+            var solidVolume = GeometryAssert.SignedVolume(rectangle);
+            var tubeVolume = GeometryAssert.SignedVolume(tube);
+
+            Assert.That(tubeVolume, Is.GreaterThan(0), "方管必须是有向朝外的实体");
+            Assert.That(tubeVolume, Is.LessThan(solidVolume * 0.9),
+                $"方管必须是空心的：方管体积 {tubeVolume:R} 应明显小于同尺寸实心块 {solidVolume:R}"
+                + "（若两者相等，说明 SquareTubeProfile.Thickness 被忽略、该截面与 Rectangle 退化成同一几何）");
+        }
+
+        [Test]
+        public void Materialize_AllProfileKinds_ProduceNonEmptySolids()
+        {
+            var baseline = SolidGen.Random(42, CoordTier.Normal);
+
+            foreach (ProfileKind profile in System.Enum.GetValues(typeof(ProfileKind)))
+            {
+                var spec = baseline with { Kind = PrimitiveKind.Extrude, Profile = profile };
+                var solid = SolidGen.Materialize(spec);
+
+                Assert.That(solid.Polygons.Count, Is.GreaterThan(0), $"{profile}: 不得为空实体");
+                Assert.That(GeometryAssert.SignedVolume(solid), Is.GreaterThan(0),
+                    $"{profile}: 有向体积必须为正（法线朝外）");
+            }
+        }
+
+        [Test]
         public void Materialize_MirrorFlagsStillOutwardFacing()
         {
+            // 夹具必须沿 X **不对称**，否则删掉 Materialize 里的镜像分支也测不出来：
+            // 原用例用中心对称的立方体 + 零偏移 + 零旋转，镜像前后 bbox 完全相同。
+            // 这里用 Extrude（Z 跨 [0, Height]，本身就不对称）+ RotateY 把 Z 的不对称映射进 X。
             var spec = SolidGen.Random(9, CoordTier.Normal) with
             {
-                Kind = PrimitiveKind.Cube,
-                Scale = 1, RotateX = 0, RotateY = 0, RotateZ = 0, Mirror = true,
+                Kind = PrimitiveKind.Extrude,
+                Profile = ProfileKind.Rectangle,
+                SizeX = 10,
+                SizeY = 20,
+                Height = 30,
+                OffsetX = 0,
+                OffsetY = 0,
+                OffsetZ = 0,
+                RotateX = 0,
+                RotateY = 30,
+                RotateZ = 0,
+                Scale = 1,
+                Mirror = false,
             };
 
-            var solid = SolidGen.Materialize(spec);
+            var plain = SolidGen.Materialize(spec);
+            var mirrored = SolidGen.Materialize(spec with { Mirror = true });
 
-            Assert.That(GeometryAssert.SignedVolume(solid), Is.GreaterThan(0),
-                "镜像后法线必须仍朝外（库内 Transform 会翻转绕序补偿）");
+            Assert.That(GeometryAssert.SignedVolume(mirrored), Is.GreaterThan(0),
+                "镜像后法线必须仍朝外（库内 Transform 会翻绕序补偿）");
+            Assert.That(GeometryAssert.SignedVolume(mirrored),
+                Is.EqualTo(GeometryAssert.SignedVolume(plain)).Within(1e-9),
+                "镜像不改变体积数值");
+
+            // 镜像**确实发生**：非对称夹具的 bbox 沿 X 按 x→−x 翻转
+            var (plainMin, plainMax) = GeometryAssert.Bounds(plain);
+            var (mirrorMin, mirrorMax) = GeometryAssert.Bounds(mirrored);
+
+            Assert.That(mirrorMin.X, Is.EqualTo(-plainMax.X).Within(1e-9),
+                "bbox 的 X 未按 x→−x 翻转 —— Mirror 分支被漏掉也测不出来");
+            Assert.That(mirrorMax.X, Is.EqualTo(-plainMin.X).Within(1e-9),
+                "bbox 的 X 未按 x→−x 翻转");
+            Assert.That(mirrorMin.Y, Is.EqualTo(plainMin.Y).Within(1e-9), "镜像不应影响 Y");
+            Assert.That(mirrorMax.Z, Is.EqualTo(plainMax.Z).Within(1e-9), "镜像不应影响 Z");
         }
 
         [Test]
