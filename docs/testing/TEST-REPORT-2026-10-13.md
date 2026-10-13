@@ -45,7 +45,7 @@ Spec：`docs/superpowers/specs/2026-10-13-comprehensive-testing-design.md`
 
 ## Task 3 — MeshAssert + CsgMesh 反射补偿回归（2026-10-13）
 
-新增 `tests/OpenCSG.NET.TestKit/MeshAssert.cs`（网格侧断言库）与 `tests/OpenCSG.NET.Tests/MeshIo/CsgMeshTest.cs`（6 个用例）。
+新增 `tests/OpenCSG.NET.TestKit/MeshAssert.cs`（网格侧断言库）与 `tests/OpenCSG.NET.Tests/MeshIo/CsgMeshTest.cs`（8 个用例）。
 
 | 用例 | 结论 |
 | --- | --- |
@@ -87,7 +87,7 @@ CSG 尺寸 (X=10, Y=20, Z=30) → `CsgMesh` 做 Y↔Z 后网格包围盒 X=[−5
 
 三个方向的 `Right × Up == −Look` 不变量均在实测中成立（无镜像）。
 
-- 新增用例：`tests/OpenCSG.NET.Tests/Views/ViewBridgeTest.cs`（5 个用例，全过）。
+- 新增用例：`tests/OpenCSG.NET.Tests/Views/ViewBridgeTest.cs`（7 个用例，全过）。
 - 套件结果：115 通过 / 0 失败 / 0 跳过（本次基线 110 + 新增 5）。
 - 缺陷：无新增（`tests/DEFECTS.md` 未变更，仍为空表）—— 手推导与实现一致，无「文档 vs 实现」冲突。
 

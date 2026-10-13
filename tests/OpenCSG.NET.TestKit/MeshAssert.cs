@@ -169,7 +169,7 @@ namespace Csg.Test
             var prefix = message ?? "mesh";
 
             Assert.That(report.TriangleCount, Is.GreaterThan(0),
-                $"{prefix}: 三角形数为 0 —— 空网格不是合法实体（本断言对空输入会真空通过）| {report}");
+                $"{prefix}: 三角形数为 0 —— 空网格不是合法实体（若无本断言，空输入会真空通过）| {report}");
             Assert.That(report.BoundaryEdges, Is.EqualTo(0),
                 $"{prefix}: 有 {report.BoundaryEdges} 条边界边（网格不封闭）| {report}");
             Assert.That(report.NonManifoldEdges, Is.EqualTo(0),
