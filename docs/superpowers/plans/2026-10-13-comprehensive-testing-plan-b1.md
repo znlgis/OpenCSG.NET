@@ -484,8 +484,10 @@ namespace Csg.Test
 在 `tests/DEFECTS.md` 的「未修复」表里把 `（暂无）` 行替换为：
 
 ```markdown
-| DEFECT-001 | `ViewArcFitter` | 低 | `DiagnosticsEnabled`/`LastDiagnostics` 是进程级静态而非 `[ThreadStatic]`，并行测试会互相串扰（同族开关 `Tessellation.ChordTolerance` 已按线程隔离并有注释记录该问题） | `dotnet test tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj -c Release --filter "FullyQualifiedName~DiagnosticsEnabled_IsNotVisibleOnOtherThreads" -- NUnit.ExplicitMode=None` | 期望：另一线程读不到开关；实际：读到 `true` | 并行执行测试时会互相污染诊断输出；单线程串行运行不受影响 | 只报告（Plan C 决定） |
+| DEFECT-001 | `ViewArcFitter` | 低 | `DiagnosticsEnabled`/`LastDiagnostics` 是进程级静态而非 `[ThreadStatic]`，并行测试会互相串扰（同族开关 `Tessellation.ChordTolerance` 已按线程隔离并有注释记录该问题） | 删掉 `ViewArcFitterDiagnosticsTest.DiagnosticsEnabled_IsNotVisibleOnOtherThreads` 的 `[Explicit]` 标注后，运行 `dotnet test tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj -c Release --filter "FullyQualifiedName~DiagnosticsEnabled_IsNotVisibleOnOtherThreads"`，该用例失败并把「另一线程读到 true」打进断言消息 | 期望：诊断开关是线程局部状态，另一线程读不到；实际：读到 `true` | 并行执行测试时会互相污染诊断输出；单线程串行运行不受影响 | 只报告（Plan C 决定） |
 ```
+
+**关于最小复现的写法**：刻意不写 `dotnet test -- NUnit.ExplicitMode=None` —— 那不是可靠开关（`ExplicitMode` 属于 NUnit 适配器设置，通常要经 `.runsettings` 提供，直接跟在 `--` 后面未必生效）。「删标注再跑」是**必然可复现**的一行操作，且不需要额外文件。
 
 - [ ] **Step 11: 确认套件仍绿且该用例默认被跳过**
 
