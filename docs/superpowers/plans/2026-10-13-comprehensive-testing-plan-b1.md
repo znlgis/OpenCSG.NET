@@ -3160,6 +3160,11 @@ git commit -m "test: Tier 1 续——变换等价/包围盒/序列化往返/相�
 
 ### Task 9: Tier 2 —— ConvexHull + 解析解属性测试
 
+> **Task 8 遗留的两条注意事项（影响本任务与 Task 10）：**
+> 1. `IdentityAssert.AssertAreaInclusionExclusion` 是**一般位置**恒等式，不是集合论恒等式。对**恰好面接触**（内部分居两侧）的实体对，共享边界面在并集中计一次、在交集中为 0 ⇒ 残差 = −2×薄片面面积，产生**假警报**（探针实测 A=[−.5,.5]³、B=A+(1,0,0) ⇒ 面积 6/6/10/0，残差 −2；而该并集几何上是正确的闭合盒）。当前域内该配置测度为零（连续偏移），故安全，但**不要把该断言指向结构化的接触实体对**。
+> 2. 同理，**体积**恒等式在带 T 顶点接缝的布尔输出上只能靠自校准漂移预算放宽容差，而那个预算由被判定的输出自校准 ⇒ 必然会吞掉与残差同量级的面级损坏（实测吞掉了 35 个豁免种子里的 7 个，其中 6 个靠面积口径抓回，1 个（seed 53）两口径皆盲）。因此**新增的布尔相关断言优先用面积口径**（无参考点、不受 T 切分影响、对重复/丢面/薄片敏感）。
+
+
 **Files:**
 - Create: `tests/OpenCSG.NET.TestKit/Oracles/ConvexHull.cs`
 - Create: `tests/OpenCSG.NET.SystemTests/Property/Tier2AnalyticTest.cs`
