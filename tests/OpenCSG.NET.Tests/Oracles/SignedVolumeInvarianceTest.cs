@@ -56,7 +56,9 @@ namespace Csg.Test
             {
                 Center = new Vector3D(0, 0, 0), Radius = 1, Resolution = 48,
             });
-            var moved = sphere.Translate(SurveyOffset, 0, 0);
+            // 必须用**各轴同时**平移：单轴平移 (1e6,0,0) 的抵消是良性的，
+            // 那条位移下修复前后都通过 —— 测不出这个修复。均匀平移才会真正触发抵消误差。
+            var moved = sphere.Translate(SurveyOffset, SurveyOffset, SurveyOffset);
 
             var atOrigin = MeshAssert.SignedVolume(CsgMesh.TrianglesOf(sphere));
             var displaced = MeshAssert.SignedVolume(CsgMesh.TrianglesOf(moved));
