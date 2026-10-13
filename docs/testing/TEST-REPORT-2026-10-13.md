@@ -492,3 +492,88 @@ $ grep -n "<报告占位符字面量>" docs/testing/TEST-REPORT-2026-10-13.md
 
 200 个新用例全绿、`OpenCSG.NET.Tests` 与全解决方案构建全绿 ⇒ **未发现新缺陷**（`tests/DEFECTS.md` 最大编号仍为
 DEFECT-004，未登记 005；本任务未动 `src/`）。基线 833 通过 → 收口 1033 通过（833 + 200），`NotExecuted` 101 不变。
+
+## Plan B2 — Tier 5 遮挡 oracle（2026-10-13）
+
+承接 spec §13 的必做项：**Plan A 起没有任何测试产生 `HiddenCount > 0`**，`DepthRaster.Split` 的可见/隐藏拆分从未
+被非平凡验证。B2 用**独立射线投射**关闭该盲区：`tests/OpenCSG.NET.TestKit/Oracles/RayCast.cs`（Möller–Trumbore
+标量实现 + 近命中查询，不调 `ViewProjector`/`DepthRaster` 任何成员）、`Oracles/OcclusionAssert.cs`
+（候选特征边独立重建 + 2D 重合匹配 + **9 探针（±cell）稳健/可能分类** + 双侧判定
+`robust ⊆ proj ⊆ possible`，采样点级 INDET 计数与逐视图空洞守卫）、`Generation/OcclusionFixtures.cs`（三个手工夹具）。
+
+### oracle 口径与已知边界
+
+- 单探针：从「2D 参数 t 处的 3D 插值点 ± (cell 邻域)」沿 −Look 投射，跳过该边相邻面与 `t ≤ 1e-7` 自命中；
+  可见 iff 无命中或命中距离 ≤ `bias`（= 正面深度跨度 × 1e-3 + 1e-9，与 `ViewProjector` 同式）。
+- 双侧判定：**稳健类必须出现**（丢类 = 失败）+ **出现的类必须可能**（无见证 = 失败）；
+  INDET（±cell 探针跨格量化敏感带混合）只计数不判定。
+- 已知边界（类文档已披露）：弧实体不直接产生采样点（仅 0.06 径向泄漏进邻近 proj 类集）；INDET 带恰是
+  `DepthRaster.Split` 的判定区 ⇒ 切分点错置与掠射族在构造上不可由本 oracle 判别；`possible` 为并集 ⇒ 重合边可互换见证。
+
+### 手工夹具（解析包络 + 回归钉 + 射线 oracle 三口径）
+
+| 夹具 | 视图 | 射线 oracle（checked/indet） | 实测隐藏段数 / 总长 | 隐藏段环境 |
+| --- | --- | --- | --- | --- |
+| 前后双盒（union） | 主视/俯视 | 24/0、24/0 | 0 | — |
+| 前后双盒 | 左视 | 21/3 | **H=2 / 16.974** | 前块轮廓 h∈[−8,2]×v∈[−5,5]（唯一有「假隐藏」判别力的矩形） |
+| L 形（方块 − 方块） | 主视 | 12/0 | 0 | — |
+| L 形 | 俯视 | 24/0 | **H=2 / 29.956** | 包络 [−5,5]×[−10,10]（漂移守卫；occluder 轮廓=实体轮廓） |
+| L 形 | 左视 | 21/0 | **H=2 / 19.978** | （沿棱柱轴向，不做区域包含；见测试注释） |
+| 通孔板（板 − 球） | 主视 | 27/0 | **H=5 / 22.016** | 近板面轮廓 h∈[−2,2]×v∈[−10,10]（漂移守卫） |
+| 通孔板 | 俯视 | 21/0 | **H=3 / 21.019** | 包络 [−5,5]×[−10,10]（漂移守卫） |
+| 通孔板 | 左视 | （**有意排除**：孔缘掠射 14/975 失败，DEFECT-004 机制②同族） | — | — |
+
+回归钉容差 ±0.05（确定性输出）；断言含 V/H/总计数与「隐藏段采样点落在解析区域 ±0.05」（采样含端点）。
+
+### 语料属性测试（Corpus Smoke 64 种子 × 三视图）
+
+- 每种子：`SolidGen.RandomPair` → 两实体并集 × 主/俯/左三视图，**逐视图**调 oracle（空洞守卫逐视图生效）。
+- **首轮实测：64 种子中 5 个全绿、59 个（92%）按 `TestCaseData.Explicit` 豁免**，全部归因于
+  **DEFECT-005**（栅格量化自遮挡误判，见下）；豁免登记表 1:1 注释（视图 + 失败形态），评审独立复核零越界/零漏豁免。
+- 覆盖门（写死 = 首轮实测 × 0.8，独立轻量扫描测试实现）：
+  `specsWithHidden ≥ 50`（实测 **63/64**）、`totalHiddenSegments ≥ 28060`（实测 **35076**；180/192 个视图有 H>0）。
+- 评审独立全量扫描（512 语料 spec × 三视图）：**46,111 个失败样本 / ~144k 判定+INDET 样本**；
+  每视图 ≤10 条诊断（≈3% 失败样本）中机制 100% 一致。
+
+### DEFECT-005（新登记，2026-10-13，中）
+
+`ViewProjector` 深度栅格量化自遮挡误判：边的格内 `nearest` 可来自该边**自身相邻面**的光栅化深度
+（面在格内倾斜 ⇒ 格心深度比边上插值深度近 ~`cell·tanφ`），当 `cell·tanφ > bias` 时**几何可见的边被判为隐藏**，
+产出 1 格级 H 碎段（亦有 >2 格长虚线 172/1358、最长 91.7 格）。触发域**不限于掠射曲面**（立方体面 |n·Look|=0.767 即中招；
+轴对齐双立方体不触发、`RotateY(30)` 即触发）。与 DEFECT-004 机制②**同族根因（栅格量化）**、触发域更广。
+最小复现与逐项数据见 `tests/DEFECTS.md` DEFECT-005 行。**只报告**（Plan C 决定；B2 未改 `src/`）。
+
+### 用例与时间预算
+
+| 项 | 值 |
+| --- | --- |
+| B2 新增用例 | **83**（RayCast 10 + 夹具/oracle 3+5 + 语料 64+1；其中 59 个语料种子标 Explicit） |
+| SystemTests 总用例数 | **1217**（TRX：executed=1057、passed=1057、failed=0、`NotExecuted`×160 = 101 + 59） |
+| `--filter "TestCategory=Smoke"` 墙钟 | 约 **10.2 秒**（`time` real 10.19 s；1003 用例全过） |
+| SystemTests 全套件墙钟 | 约 **11.8 秒**（`time` real 11.78 s、运行器自报 10 s；1057 用例全过） |
+
+时间预算结论：**满足** spec §7 的「SystemTests ≤ 8 分钟」—— B2 使全套件墙钟从 ~9 s 增至 ~12 s
+（遮挡 oracle 的射线投射开销），距预算仍有两个数量级余量；**无需**移入 nightly。
+
+### 收口验证（全量，实测输出）
+
+```text
+$ dotnet build OpenCSG.NET.slnx -c Release 2>&1 | tail -3
+    0 个警告
+    0 个错误
+
+$ dotnet test tests/OpenCSG.NET.Tests -c Release --no-build 2>&1 | tail -2
+已通过! - 失败:     0，通过:   129，已跳过:     0，总计:   129，持续时间: 632 ms - OpenCSG.NET.Tests.dll (net8.0)
+
+$ dotnet test tests/OpenCSG.NET.SystemTests -c Release --no-build 2>&1 | tail -2
+已通过! - 失败:     0，通过:  1057，已跳过:     0，总计:  1057，持续时间: 10 s - OpenCSG.NET.SystemTests.dll (net8.0)
+（TRX：total="1217" executed="1057"、passed=1057、failed=0、outcome `NotExecuted`×160）
+
+$ ls tests/OpenCSG.NET.Tests/Results/*.stl | wc -l
+45
+$ ls tests/OpenCSG.NET.Tests/Results/*_.stl 2>/dev/null | wc -l
+0
+```
+
+`src/` 零改动；`NotExecuted` 由 101 增至 160（新增 59 个 DEFECT-005 语料豁免）；SystemTests 执行通过数
+基线 1033（B2 开工）→ 收口 1057（= 1033 + 24 个实际执行的新用例）。

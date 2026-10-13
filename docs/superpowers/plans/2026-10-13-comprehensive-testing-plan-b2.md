@@ -162,9 +162,17 @@
 
 ## 完成定义（Plan B2）
 
-- [ ] `RayCast`/`OcclusionAssert` 落地且**独立于** `DepthRaster`（不调其任何成员）。
-- [ ] 至少 3 个手工夹具 × 对应视图出现 `HiddenCount > 0`，且 ray-cast 双侧判定 0 失败。
-- [ ] 语料属性测试全绿（含豁免）且覆盖门写死为实测下限。
-- [ ] 全量构建 0 警告 0 错误；Tests 129/0/1；`Results/` 45/0。
-- [ ] `src/` 零改动；新缺陷（若有）已登记 + `[Explicit]` + 最小复现。
-- [ ] `TEST-REPORT` 零占位符；spec §13 遮挡项已勾。
+**状态：已全部完成（2026-10-13，分支 `test/comprehensive-suite-plan-b2`，末 commit 见台账）。** 逐项核对：
+
+- [x] `RayCast`/`OcclusionAssert` 落地且**独立于** `DepthRaster`（不调其任何成员；评审文本级核实）。
+- [x] 5 个手工夹具视图配置出现 `HiddenCount > 0`（前后双盒 左视 H=2、L 形 俯视/左视 H=2、通孔板 主视 H=5/俯视 H=3），
+  且 ray-cast 双侧判定 0 失败（逐视图 checked/indet 见 TEST-REPORT）；通孔板左视因掠射孔缘**有意排除**并注明归属（DEFECT-004 机制②）。
+- [x] 语料属性测试全绿（64 种子：5 绿 + 59 按 DEFECT-005 `[Explicit]` 豁免，评审独立复核零越界/零漏豁免）；
+  覆盖门写死为实测 × 0.8（`specsWithHidden ≥ 50` 实测 63/64；`totalHiddenSegments ≥ 28060` 实测 35076）。
+- [x] 全量构建 0 警告 0 错误；Tests 129/0/1；`Results/` 45/0；SystemTests 1057 通过 / 0 失败 / 160 NotExecuted（TRX total=1217）。
+- [x] `src/` 零改动；**新缺陷 DEFECT-005 已登记**（栅格量化自遮挡误判，59/64 语料种子）；Explicit 豁免 + 最小复现（seed 03 一行命令 + RotateY 独立片段；评审独立复现反例 0.0157 = 12.5% bias）。
+- [x] `TEST-REPORT` 零占位符（含「Plan B2」全节）；spec §13 遮挡项已勾（含遗留改进建议：计数式采样级 shard 规则恢复语料全量覆盖）。
+
+> 逐任务的评审/fix round/复审记录见 `.superpowers/sdd/2026-10-13-comprehensive-testing-plan-b2/progress.md`。
+> 评审发现的控制器错误两处（均被环节捕获）：Task 1 简报 minDistance 用例方向数学不可达、Task 3 简报 LShape 俯视矩形推导错误；
+> 修正轮的 DEFECT-005 建议最小复现片段（轴对齐双立方体）实测不复现，已替换为证据支撑的版本。
