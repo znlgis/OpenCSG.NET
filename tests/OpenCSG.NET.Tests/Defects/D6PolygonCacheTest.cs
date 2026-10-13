@@ -37,6 +37,9 @@ namespace Csg.Test
         [Explicit("DEFECT-006: Polygon 的 BoundingBox/BoundingSphere 缓存与 A1 同模式——原地改 Vertices 后 Union 的 MayOverlap 误判不相交")]
         public void CachedPolygonBounds_GoStale_AfterInPlaceVertexSwap_UnionSkipsClipping()
         {
+            // 注：本用例故意不设未预热对照——未预热路径会读到过期 Plane 与顶点不一致的数据，
+            // BSP 实测 >75 s 不返回（见 tests/DEFECTS.md DEFECT-006 影响面），照搬会挂住 CI。
+            // 缓存历史的对照由第二个用例（平面自洽变体）承担。
             var a = CubeAt(25); // y∈[20,30]
             _ = a.Intersect(Solids.Cube(10, center: true)); // 预热：读 a.Bounds ⇒ 逐 polygon 缓存 bbox（树构造再缓存 sphere）
 
