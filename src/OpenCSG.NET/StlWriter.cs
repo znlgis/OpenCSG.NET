@@ -40,11 +40,18 @@ public sealed class StlWriteResult
 /// 法向由**绕序重算并归一化**（不信任调用方传入的法向）；退化三角形（面积≈0）写零法向，
 /// 这是 STL 约定，读入方可自行忽略。
 /// </para>
+/// <para>
+/// <c>header</c> 省略时两条路径都用 ASCII 安全默认值；给定值中的 <c>\r</c>/<c>\n</c> 一律替换为空格——
+/// 二进制头带裸换行、ASCII 的 <c>solid &lt;head&gt;</c> 被拆成两行都会破坏文件结构。超长头截断到 79 字节。
+/// </para>
 /// </summary>
 public static class StlWriter
 {
     /// <summary>二进制 STL 头部长度（字节）。</summary>
     public const int HeaderLength = 80;
+
+    /// <summary>header 省略时的默认名：纯 ASCII，避免中文字符经 ASCII 编码变成 '?'。</summary>
+    private const string DefaultHeader = "STL export";
 
     /// <summary>单面字节数。</summary>
     public const int FacetLength = 50;
@@ -75,7 +82,7 @@ public static class StlWriter
         using var writer = new BinaryWriter(stream);
 
         var head = new byte[HeaderLength];
-        var text = header ?? "调用方 STL export";
+        var text = (header ?? DefaultHeader).Replace('\r', ' ').Replace('\n', ' ');
         var textBytes = Encoding.ASCII.GetBytes(text);
         Array.Copy(textBytes, head, Math.Min(textBytes.Length, HeaderLength - 1));
         writer.Write(head);
@@ -102,7 +109,8 @@ public static class StlWriter
         using var stream = new FileStream(path, FileMode.Create, FileAccess.Write);
         using var writer = new StreamWriter(stream, new UTF8Encoding(false));
 
-        writer.WriteLine("solid " + (header ?? "调用方"));
+        var name = (header ?? DefaultHeader).Replace('\r', ' ').Replace('\n', ' ');
+        writer.WriteLine("solid " + name);
         foreach (var triangle in triangles)
         {
             var normal = NormalOf(triangle);
@@ -115,7 +123,7 @@ public static class StlWriter
             writer.WriteLine("    endloop");
             writer.WriteLine("  endfacet");
         }
-        writer.WriteLine("endsolid " + (header ?? "调用方"));
+        writer.WriteLine("endsolid " + name);
         writer.Flush();
         return stream.Length;
     }

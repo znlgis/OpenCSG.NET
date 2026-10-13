@@ -187,7 +187,7 @@ namespace Csg.Test
                 var spec = SolidGen.Random(seed, CoordTier.Normal);
 
                 Assert.That(spec.SectorAngle, Is.EqualTo(360.0),
-                    "已知缺陷：SectorAngle ∈ {0, 720, 负数} 会静默产出空实体（Plan C 承接），随机采样必须排除");
+                    "SectorAngle 非零角已在 Plan C/A2 归一修复；生成器仍只采样 360（如需采样扇角为后续增强）");
                 Assert.That(spec.RadiusEnd, Is.GreaterThan(0));
             }
         }
