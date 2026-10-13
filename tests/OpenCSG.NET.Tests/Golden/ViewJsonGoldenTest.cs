@@ -142,13 +142,23 @@ namespace Csg.Test
         /// <summary>
         /// 圆弧扫掠角（弧度，0~2π 闭区间）：口径与 <see cref="ViewArc.SweepDegrees"/> 一致
         /// （整圆恒 2π；否则把 End−Start 归一到 (0, 2π)），只是不绕道度数。
+        /// <para>
+        /// <b>镜像维护（desync 风险）</b>：本归一化是 <see cref="ViewArc.SweepDegrees"/>
+        /// （<c>src/OpenCSG.NET/ViewArcFitter.cs</c>）的镜像实现——两处必须同步修改，
+        /// 否则 golden 的 <c>sweep</c> 字段会与库内口径背离。
+        /// </para>
         /// </summary>
         static double SweepRadians(ViewArc arc)
         {
             if (arc.IsClosed)
                 return 2 * Math.PI;
 
+            // 非有限守卫：EndAngle = ±∞ 经公开 ViewArc ctor 可构造（此时 cx/cy/r/start 可全为有限值，
+            // 序列化会先走到这里）；若不先抛，下面的 while 归一化会**死循环**（±∞ ∓ 2π 恒为 ±∞），
+            // 而不是如期以 InvalidOperationException 收敛。
             var sweep = arc.EndAngle - arc.StartAngle;
+            EnsureFinite(sweep, "圆弧扫掠角 EndAngle − StartAngle");
+
             while (sweep < 0) sweep += 2 * Math.PI;
             while (sweep >= 2 * Math.PI) sweep -= 2 * Math.PI;
             return sweep;
@@ -156,10 +166,20 @@ namespace Csg.Test
 
         static void AppendNumber(StringBuilder sb, double value)
         {
+            EnsureFinite(value, "输出数值");
+            sb.Append(value.ToString("R", CultureInfo.InvariantCulture));
+        }
+
+        /// <summary>
+        /// 非有限数守卫（NaN/±∞ 不是合法 JSON 数字）：序列化前须先修数据；
+        /// <see cref="AppendNumber"/> 与 <see cref="SweepRadians"/> 共用同一守卫风格
+        /// （统一抛 <see cref="InvalidOperationException"/>，不得静默写出非法 JSON 或挂起）。
+        /// </summary>
+        static void EnsureFinite(double value, string what)
+        {
             if (double.IsNaN(value) || double.IsInfinity(value))
                 throw new InvalidOperationException(
-                    $"JSON 无法表达非有限数（{value.ToString(CultureInfo.InvariantCulture)}）；序列化前须先修数据。");
-            sb.Append(value.ToString("R", CultureInfo.InvariantCulture));
+                    $"JSON 无法表达非有限数（{what} = {value.ToString(CultureInfo.InvariantCulture)}）；序列化前须先修数据。");
         }
 
         /// <summary>写一个 JSON 字符串字面量：转义 <c>"</c>/<c>\</c> 与全部控制字符；非 ASCII 原样写（UTF-8）。</summary>
@@ -552,6 +572,29 @@ namespace Csg.Test
                 new[] { new ViewSegment(new ViewPoint2(0, 0), new ViewPoint2(1, 1), true) },
                 new[] { new ViewArc(new ViewPoint2(0, 0), double.PositiveInfinity, 0, 1, true, false) });
             Assert.Throws<InvalidOperationException>(() => ViewJson.Serialize(new[] { infView }));
+        }
+
+        [Test]
+        public void Serializer_NonFiniteSweep_Throws()
+        {
+            // 扫掠角守卫（审查补强，Finding-2）：EndAngle = ±∞ 经公开 ViewArc ctor 可构造，且
+            // cx/cy/r/start 全为有限值 ⇒ 序列化会先进入 SweepRadians。若无守卫，归一化 while
+            // 死循环（±∞ ∓ 2π 恒为 ±∞）—— 本用例会**永久挂起**而不是如期抛错（这正是守卫存在的原因）。
+            var sweepPosInfView = new ViewProjection(
+                ViewDirections.Front,
+                Array.Empty<ViewSegment>(),
+                new[] { new ViewArc(new ViewPoint2(0, 0), 1.0, 0, double.PositiveInfinity, true, false) });
+            Assert.Throws<InvalidOperationException>(
+                () => ViewJson.Serialize(new[] { sweepPosInfView }),
+                "EndAngle=+∞（StartAngle 有限）必须以 InvalidOperationException 收敛");
+
+            var sweepNegInfView = new ViewProjection(
+                ViewDirections.Front,
+                Array.Empty<ViewSegment>(),
+                new[] { new ViewArc(new ViewPoint2(0, 0), 1.0, 0, double.NegativeInfinity, true, false) });
+            Assert.Throws<InvalidOperationException>(
+                () => ViewJson.Serialize(new[] { sweepNegInfView }),
+                "EndAngle=−∞（StartAngle 有限）必须以 InvalidOperationException 收敛");
         }
 
         // ─────────────── golden 私有辅助 ───────────────
