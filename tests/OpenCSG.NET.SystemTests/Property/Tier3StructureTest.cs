@@ -103,6 +103,29 @@ namespace Csg.Test
                 $"跨可见性的共线重叠段必须保持两条（Clean 的合并带同可见性守卫），实际 {cleaned.Count} 条");
         }
 
+        [Test]
+        [Category("Smoke")]
+        public void Clean_ChainedMergesStayWithinOracleTolerance()
+        {
+            // 反例钉：Clean 的合并是两级的（TryExtend 投影到累加基线，CollapseOverlaps 再投影到另一条基线），
+            // 一个原始点最多经历两次投影 ⇒ oracle 覆盖容差必须是 2×joinTolerance = 8×minKeep。
+            // 本夹具实测某点位移 0.0158 = 7.9×minKeep：4× 容差会在此误报，8× 必须通过 ——
+            // 若有人把容差收紧回去，这条测试立即失败。
+            var bounds = new ViewBounds2(0, -0.0158, 20, 0);
+            var input = new[]
+            {
+                new ViewSegment(new ViewPoint2(0, 0), new ViewPoint2(10, 0), true),
+                new ViewSegment(new ViewPoint2(10.02, -0.0079), new ViewPoint2(20, -0.0079), true),
+                new ViewSegment(new ViewPoint2(9.9, -0.0158), new ViewPoint2(20, -0.0158), true),
+            };
+
+            var cleaned = ViewSegmentCleanup.Clean(input, bounds);
+
+            Assert.That(cleaned.Count, Is.EqualTo(1),
+                "夹具前提：该输入下 Clean 实测应合并为 1 条（若 Clean 行为变化，请复核本用例前提）");
+            HlrAssert.AssertCleanPreservesCoverage(input, cleaned, bounds, "chained-merge fixture");
+        }
+
         [TestCaseSource(nameof(SegmentCases))]
         [Category("Smoke")]
         public void Fit_CoversInputWithArcsPlusResidues(long seed)
@@ -169,12 +192,77 @@ namespace Csg.Test
 
         [Test]
         [Category("Smoke")]
+        public void MergeConcyclic_JoinsClosesAndKeepsAcrossThresholds()
+        {
+            // 种子驱动的用例只覆盖「Fit 内部已完成合并」后的稳定输入；这里用公共 ViewArc 构造器
+            // 直接跨过两个阈值：并接阈值 ConcyclicMergeGapDegrees = 1°、近闭合补圆阈值 MaxClosingGapDegrees = 25°。
+            var center = new ViewPoint2(3, -2);
+            const double radius = 7.0;
+            static double Deg(double degrees) => degrees * Math.PI / 180.0;
+
+            // (a) 两段 179.5° 弧，两处 0.5° 空隙（≤ 1° 并接）且总缺口 1°（≤ 25° 补圆）⇒ 1 条整圆
+            var joined = ViewArcFitter.MergeConcyclic(new[]
+            {
+                new ViewArc(center, radius, Deg(0), Deg(179.5), true, false),
+                new ViewArc(center, radius, Deg(180), Deg(359.5), true, false),
+            });
+            Assert.That(joined.Count, Is.EqualTo(1), $"两段 0.5° 空隙的同圆弧应并成 1 条，实际 {joined.Count}");
+            Assert.That(joined[0].IsClosed, Is.True, "总缺口 1° ≤ 25° 应补成整圆");
+            Assert.That(joined[0].Radius, Is.EqualTo(radius).Within(1e-9));
+
+            var joinedAgain = ViewArcFitter.MergeConcyclic(joined);
+            Assert.That(joinedAgain.Count, Is.EqualTo(1));
+            Assert.That(joinedAgain[0].IsClosed, Is.True);
+
+            // (b) 缺口 20°（> 1° 不并接；总缺口 40° > 25° 不补圆）⇒ 保持 2 条
+            var kept = ViewArcFitter.MergeConcyclic(new[]
+            {
+                new ViewArc(center, radius, Deg(0), Deg(160), true, false),
+                new ViewArc(center, radius, Deg(180), Deg(340), true, false),
+            });
+            Assert.That(kept.Count, Is.EqualTo(2), "缺口 20° > 1° 且总缺口 40° > 25° ⇒ 不得并接或补圆");
+
+            // (c) 并接但覆盖率不足（各 150°，缺口 0.5° 并接后总缺口 59.5° > 25°）⇒ 1 条开口弧，不补圆
+            var unionOnly = ViewArcFitter.MergeConcyclic(new[]
+            {
+                new ViewArc(center, radius, Deg(0), Deg(150), true, false),
+                new ViewArc(center, radius, Deg(150.5), Deg(300.5), true, false),
+            });
+            Assert.That(unionOnly.Count, Is.EqualTo(1), "0.5° 空隙应并接成 1 条");
+            Assert.That(unionOnly[0].IsClosed, Is.False, "总缺口 59.5° > 25° ⇒ 不得补圆");
+
+            // (d) 不同圆不得互相合并
+            var foreign = ViewArcFitter.MergeConcyclic(new[]
+            {
+                new ViewArc(center, radius, Deg(0), Deg(90), true, false),
+                new ViewArc(new ViewPoint2(center.X + 50, center.Y), radius * 2, Deg(0), Deg(90), true, false),
+            });
+            Assert.That(foreign.Count, Is.EqualTo(2), "不同圆心的弧不得合并");
+        }
+
+        [Test]
+        [Category("Smoke")]
         public void Topology_CubeIsAClosedManifoldWithEulerTwo()
         {
             var cube = Solids.Cube(10, center: true);
             var triangles = ViewBridge.ToViewTriangles(cube);
 
             HlrAssert.AssertTopologyIsClosedManifold(triangles, "cube");
+        }
+
+        [Test]
+        [Category("Smoke")]
+        public void Topology_OracleRejectsFlippedWinding()
+        {
+            // 钉住 oracle 的判别力：翻转一个三角形的绕序后，拓扑断言必须失败。
+            // （没有这条，绕序检查退化成死断言的回归不会被任何用例抓住。）
+            var cube = Solids.Cube(10, center: true);
+            var triangles = ViewBridge.ToViewTriangles(cube);
+            var flipped = new List<ViewTriangle>(triangles);
+            flipped[0] = new ViewTriangle(flipped[0][0], flipped[0][2], flipped[0][1]);
+
+            Assert.That(() => HlrAssert.AssertTopologyIsClosedManifold(flipped, "flipped"),
+                Throws.TypeOf<AssertionException>());
         }
 
         [Test]
@@ -217,6 +305,7 @@ namespace Csg.Test
             foreach (var view in views)
             {
                 Assert.That(view.VisibleCount, Is.GreaterThan(0), $"{view.Direction.Name}: 无可见段");
+                HlrAssert.AssertVisibilityAccounting(view, expectedVisible: 4, expectedHidden: 0);
                 Assert.That(SumVisibleLength(view),
                     Is.EqualTo(view.Bounds.Width * 2 + view.Bounds.Height * 2).Within(1e-6),
                     $"{view.Direction.Name}: 凸体可见段总长应等于视图矩形周长（4 条轮廓边）");

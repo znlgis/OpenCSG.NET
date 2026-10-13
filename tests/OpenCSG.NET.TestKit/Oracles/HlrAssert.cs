@@ -8,8 +8,9 @@ namespace Csg.Test
     /// Tier 3：HLR 前端的结构与守恒不变量。
     /// 两处覆盖度判据的口径都与被测实现的**契约**对齐（不是随手放的容差，见各方法注释）：
     /// <list type="bullet">
-    /// <item><see cref="AssertCleanPreservesCoverage"/> 的覆盖容差 = Clean 自己的接链容差
-    /// （合并会把近共线成员投影到基准线，点的位移上界就是它）；</item>
+    /// <item><see cref="AssertCleanPreservesCoverage"/> 的覆盖容差 = <c>2 × joinTolerance</c>
+    /// （Clean 的合并是两级的：TryExtend 投影到累加基线，CollapseOverlaps 再把该基线投影到另一条
+    /// 基准线 ⇒ 一个原始点最多经历两次投影）；</item>
     /// <item><see cref="AssertFitCoversInput"/> 按 <c>TryBuildArc</c> 的两级契约判定：
     /// 链顶点距圆 ≤ tolerance，弦中点距圆 ≤ max(tolerance, 5%·R)（矢高判据）。</item>
     /// </list>
@@ -57,10 +58,14 @@ namespace Csg.Test
         /// <para>
         /// 足够长 = 长于 Clean 的丢弃阈值 <c>minLength = max(1e-3, 1e-4 × 视图对角线)</c>
         /// （与 <see cref="ViewSegmentCleanup.Clean"/> 的公式一致）。
-        /// 覆盖容差取 Clean 自己的接链容差 <c>4 × minLength</c>：TryExtend / CollapseOverlaps
-        /// 只把「两端点都落在基准线 joinTolerance 内」的近共线成员投影到基准线上，
-        /// 成员点在合并中的位移上界就是这个容差；更紧的容差会把契约内的合法投影判成「丢几何」
-        /// （控制器实测：32 个种子上 1e-6 有 72 处误报，4×minLength 为 0 处）。
+        /// 覆盖容差取 <c>2 × joinTolerance = 8 × minLength</c>：Clean 的合并是**两级**的 ——
+        /// TryExtend 先把近共线成员投影到累加基线（位移 ≤ joinTolerance），随后 CollapseOverlaps
+        /// 又把合并出的基线投影到另一条基准线（位移 ≤ joinTolerance）；一个原始点最多经历两次投影，
+        /// 位移上界 = 2 × joinTolerance。4 × minLength 不是安全界：链式夹具实测某点位移
+        /// 0.0158 = 7.9 × minLength（两级各 0.0079），4× 会误报、8× 恰好覆盖。
+        /// 覆盖检索按输入段的**可见性**过滤：Clean 不跨可见性合并 ⇒ 同可见性输出必须存在；
+        /// 容差放宽后按列表顺序抓第一条会误把异可见性邻段当覆盖（seed 07 实测：样本距可见输出 0，
+        /// 却先命中距离 0.10 的隐藏邻段），异可见性命中只作「跨可见性合并」诊断。
         /// </para>
         /// </summary>
         public static void AssertCleanPreservesCoverage(
@@ -72,7 +77,7 @@ namespace Csg.Test
             var diagonal = Math.Sqrt(bounds.Width * bounds.Width + bounds.Height * bounds.Height);
             var minKeep = Math.Max(ViewSegmentCleanup.MinAbsoluteLength,
                                    ViewSegmentCleanup.MinRelativeLength * diagonal);
-            var coverageTolerance = Math.Max(OnSegmentTolerance, 4.0 * minKeep);
+            var coverageTolerance = Math.Max(OnSegmentTolerance, 8.0 * minKeep);
 
             foreach (var segment in input)
             {
@@ -81,16 +86,19 @@ namespace Csg.Test
 
                 foreach (var sample in SamplePoints(segment))
                 {
-                    var covering = FindCovering(output, sample, coverageTolerance);
+                    var covering = FindCovering(output, sample, coverageTolerance, segment.IsVisible);
+                    if (covering != null)
+                        continue;
 
-                    Assert.That(covering, Is.Not.Null,
+                    // 同可见性输出缺失 ⇒ 要么几何被丢，要么被并到异可见性段上（后者给出更准确的诊断）。
+                    var opposite = FindCovering(output, sample, coverageTolerance, !segment.IsVisible);
+                    Assert.That(opposite, Is.Null,
+                        $"{Prefix(message)} 清理跨越了可见性合并：输入段是 "
+                        + $"{(segment.IsVisible ? "可见" : "隐藏")}，其上的点 ({sample.X:R},{sample.Y:R}) 只被异可见性输出段覆盖");
+
+                    Assert.Fail(
                         $"{Prefix(message)} 清理丢失了覆盖：输入段 {segment.Start}→{segment.End} 上的点 "
                         + $"({sample.X:R},{sample.Y:R}) 不在任何输出段上");
-
-                    Assert.That(covering!.Value.IsVisible, Is.EqualTo(segment.IsVisible),
-                        $"{Prefix(message)} 清理跨越了可见性合并：输入段是 "
-                        + $"{(segment.IsVisible ? "可见" : "隐藏")}，覆盖它的输出段却是 "
-                        + $"{(covering.Value.IsVisible ? "可见" : "隐藏")}");
                 }
             }
         }
@@ -155,20 +163,48 @@ namespace Csg.Test
             var prefix = Prefix(message);
 
             var boundary = 0;
-            var directed = new Dictionary<long, int>();
-
             foreach (var edge in topology.Edges)
             {
                 if (edge.TriB < 0)
                     boundary++;
-
-                var key = ((long)edge.P0 << 32) | (uint)edge.P1;
-                directed.TryGetValue(key, out var count);
-                directed[key] = count + 1;
             }
 
             Assert.That(boundary, Is.EqualTo(0),
                 $"{prefix} 有 {boundary} 条边界边（网格不封闭）");
+
+            // 绕序/流形检查必须从**三角形绕序**重建有向边 —— ViewMeshTopology.Edges 是无向去重表
+            // （P0 < P1、每条无向边仅一条），拿它数「有向边重复」恒为 0，是死断言。
+            var directed = new Dictionary<long, int>();
+            var undirected = new Dictionary<long, int>();
+
+            foreach (var triangle in topology.Triangles)
+            {
+                var ids = new int[3];
+                for (var v = 0; v < 3; v++)
+                {
+                    ids[v] = WeldIndex(topology.Points, triangle[v], WeldTolerance);
+                    Assert.That(ids[v], Is.GreaterThanOrEqualTo(0),
+                        $"{prefix} 三角形顶点 {triangle[v]} 在焊接点表内找不到匹配（容差 {WeldTolerance}）");
+                }
+
+                for (var v = 0; v < 3; v++)
+                {
+                    var a = ids[v];
+                    var b = ids[(v + 1) % 3];
+                    if (a == b)
+                        continue;   // 退化边
+
+                    var directedKey = ((long)a << 32) | (uint)b;
+                    directed.TryGetValue(directedKey, out var directedCount);
+                    directed[directedKey] = directedCount + 1;
+
+                    var p0 = Math.Min(a, b);
+                    var p1 = Math.Max(a, b);
+                    var undirectedKey = ((long)p0 << 32) | (uint)p1;
+                    undirected.TryGetValue(undirectedKey, out var undirectedCount);
+                    undirected[undirectedKey] = undirectedCount + 1;
+                }
+            }
 
             var duplicated = 0;
             foreach (var pair in directed)
@@ -177,6 +213,15 @@ namespace Csg.Test
 
             Assert.That(duplicated, Is.EqualTo(0),
                 $"{prefix} 有 {duplicated} 条有向边重复（绕序不一致）");
+
+            var nonManifold = 0;
+            foreach (var pair in undirected)
+                if (pair.Value != 2)
+                    nonManifold++;
+
+            Assert.That(nonManifold, Is.EqualTo(0),
+                $"{prefix} 有 {nonManifold} 条无向边不恰好被 2 个三角形共用（非流形；"
+                + "ViewMeshTopology.Edges 会静默忽略第 3 片三角形，故此处必须自算）");
 
             var chi = topology.Points.Count - topology.Edges.Count + topology.Triangles.Count;
             Assert.That(chi, Is.EqualTo(2),
@@ -210,11 +255,15 @@ namespace Csg.Test
         }
 
         static ViewSegment? FindCovering(
-            IReadOnlyList<ViewSegment> segments, ViewPoint2 point, double tolerance)
+            IReadOnlyList<ViewSegment> segments, ViewPoint2 point, double tolerance, bool? isVisible = null)
         {
             foreach (var segment in segments)
-                if (DistanceToSegment(point, segment) <= tolerance)
+                if ((isVisible == null || segment.IsVisible == isVisible)
+                    && DistanceToSegment(point, segment) <= tolerance)
+                {
                     return segment;
+                }
+
             return null;
         }
 
@@ -239,6 +288,30 @@ namespace Csg.Test
             var dx = point.X - arc.Center.X;
             var dy = point.Y - arc.Center.Y;
             return Math.Abs(Math.Sqrt(dx * dx + dy * dy) - arc.Radius);
+        }
+
+        /// <summary>与 ViewMeshTopology.WeldTolerance 一致的焊接容差（库内为私有常量）。</summary>
+        const double WeldTolerance = 1e-6;
+
+        /// <summary>三角形顶点 → 焊接点表下标（取最近点，容差内才接受）。</summary>
+        static int WeldIndex(IReadOnlyList<ViewPoint> points, ViewPoint vertex, double tolerance)
+        {
+            var best = -1;
+            var bestDistance = double.MaxValue;
+            for (var i = 0; i < points.Count; i++)
+            {
+                var dx = points[i].X - vertex.X;
+                var dy = points[i].Y - vertex.Y;
+                var dz = points[i].Z - vertex.Z;
+                var distance = dx * dx + dy * dy + dz * dz;
+                if (distance <= bestDistance)
+                {
+                    bestDistance = distance;
+                    best = i;
+                }
+            }
+
+            return best >= 0 && Math.Sqrt(bestDistance) <= tolerance ? best : -1;
         }
 
         static double DistanceToSegment(ViewPoint2 point, ViewSegment segment)
