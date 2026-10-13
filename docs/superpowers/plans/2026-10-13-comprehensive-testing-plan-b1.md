@@ -2382,6 +2382,46 @@ namespace Csg.Test
             IdentityAssert.AssertBooleanMonotonicity(a, b, Tol, Describe(seed, tier));
         }
 
+        /// <summary>
+        /// FsCheck 驱动的 Tier 1：在**固定语料之外**探索输入，并让 FsCheck 把失败**收缩**成最小的参数元组。
+        /// 设计要点：不用 FsCheck 去生成 `SolidSpec`（那要写 2.x 版的 Arbitrary/Gen 组合子，而 Task 1 的 spike
+        /// 只验证过「`[Property]` + 基本类型参数」这一种形状），而是让它生成**几个整数**，
+        /// 再由 <see cref="SpecFrom"/> 确定性地映射成两个 spec。
+        /// 这样收缩作用在整数上 ⇒ 最小反例就是四个能读懂的数，而不是一个无法解释的网格。
+        /// </summary>
+        [FsCheck.NUnit.Property(MaxTest = 200)]
+        public void InclusionExclusion_OnFsCheckGeneratedSpecs(
+            int sizeSeed, int offsetSeed, int rotationSeed, byte kindSeed)
+        {
+            var specA = SpecFrom(sizeSeed, offsetSeed, rotationSeed, kindSeed, 0);
+            var specB = SpecFrom(sizeSeed, offsetSeed, rotationSeed, kindSeed, 1);
+
+            var a = SolidGen.Materialize(specA);
+            var b = SolidGen.Materialize(specB);
+
+            IdentityAssert.AssertInclusionExclusion(a, b, Tol,
+                $"FsCheck 反例：sizeSeed={sizeSeed} offsetSeed={offsetSeed} rotationSeed={rotationSeed} kindSeed={kindSeed}");
+        }
+
+        /// <summary>把几个整数确定性地映射成一个 spec（`variant` 区分 A/B 两侧）。</summary>
+        static SolidSpec SpecFrom(int sizeSeed, int offsetSeed, int rotationSeed, byte kindSeed, int variant)
+        {
+            var baseSpec = SolidGen.Random((long)sizeSeed * 31 + variant, CoordTier.Normal);
+            var rng = new SplitMix64((ulong)offsetSeed * 0x9E3779B97F4A7C15UL + (ulong)variant);
+
+            return baseSpec with
+            {
+                Kind = (PrimitiveKind)(kindSeed % 6),
+                // 偏移按 baseSpec 的尺寸缩放，使 B 既可能相交也可能分离；range 取 ±2× 尺寸量级
+                OffsetX = rng.NextSigned() * Math.Max(baseSpec.SizeX, 1.0) * 2.0,
+                OffsetY = rng.NextSigned() * Math.Max(baseSpec.SizeY, 1.0) * 2.0,
+                OffsetZ = rng.NextSigned() * Math.Max(baseSpec.SizeZ, 1.0) * 2.0,
+                RotateX = (rotationSeed % 360),
+                RotateY = (rotationSeed / 360 % 360),
+                RotateZ = (rotationSeed / 129600 % 360),
+            };
+        }
+
         [TestCaseSource(nameof(SmokeCases))]
         [Category("Smoke")]
         public void Commutativity(long seed, CoordTier tier)
