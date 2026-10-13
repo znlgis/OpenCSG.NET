@@ -7,7 +7,8 @@ using NUnit.Framework;
 namespace Csg.Test
 {
     /// <summary>
-    /// 验证 golden 门禁本身有效：门禁检查逻辑必须能发现残留的 *_ .stl 与 *_ .json，
+    /// 验证 golden 门禁本身有效：门禁检查逻辑必须能发现残留的 *_ .stl 与 *_ .json
+    /// （含 Views/ 等子目录内的残留，见 Tier 4 JSON golden 布局），
     /// 且 GoldenPaths 必须解析到真实的 Results 目录（否则门禁形同虚设）。
     /// </summary>
     [TestFixture]
@@ -113,6 +114,58 @@ namespace Csg.Test
             finally
             {
                 File.Delete(probe);
+            }
+        }
+
+        [Test]
+        public void FindPendingGoldens_DetectsRejectedFileInSubdirectory()
+        {
+            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location);
+            // Tier 4 的 JSON golden 位于 Results/Views/；门禁必须递归发现子目录残留，
+            // 否则这些 golden 无人看守、无法升级。
+            var views = Path.Combine(results, "Views");
+            var createdDir = !Directory.Exists(views);
+            Directory.CreateDirectory(views);
+            var probe = Path.Combine(views, "__GoldenGuardSubdirProbe___.json");
+            File.WriteAllText(probe, "{\"probe\":true}\n");
+
+            try
+            {
+                var pending = GoldenGuard.FindPendingGoldens(results);
+
+                Assert.That(pending, Does.Contain(probe));
+            }
+            finally
+            {
+                File.Delete(probe);
+                // 只清理本用例自己创建的目录；若目录已存在（或有残留内容），保持原状。
+                if (createdDir && Directory.Exists(views) && Directory.GetFileSystemEntries(views).Length == 0)
+                    Directory.Delete(views);
+            }
+        }
+
+        [Test]
+        public void FindPendingGoldens_IgnoresAcceptedFileInSubdirectory()
+        {
+            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location);
+            var views = Path.Combine(results, "Views");
+            var createdDir = !Directory.Exists(views);
+            Directory.CreateDirectory(views);
+            // 与顶层同理：已接受的 JSON 探针不以 "_" 结尾，不能被误判为残留。
+            var probe = Path.Combine(views, "__GoldenGuardSubdirProbe.json");
+            File.WriteAllText(probe, "{\"probe\":true}\n");
+
+            try
+            {
+                var pending = GoldenGuard.FindPendingGoldens(results);
+
+                Assert.That(pending, Does.Not.Contain(probe));
+            }
+            finally
+            {
+                File.Delete(probe);
+                if (createdDir && Directory.Exists(views) && Directory.GetFileSystemEntries(views).Length == 0)
+                    Directory.Delete(views);
             }
         }
 

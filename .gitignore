@@ -431,5 +431,8 @@ FodyWeavers.xsd
 # 测试产物（覆盖率报告、物化数据集、基准输出）
 artifacts/
 
-# golden 未升级残留（由 tests/OpenCSG.NET.Tests/GoldenGuard.cs 强制清理）
-tests/**/Results/*_.stl
+# golden 未升级残留（由 tests/OpenCSG.NET.Tests/GoldenGuard.cs 递归强制清理，含 Views/ 等子目录）。
+# `**` 中缀匹配零层或多层目录，故每条规则同时覆盖顶层与嵌套；
+# 45 个已跟踪的正式 golden 均不以 "_" 结尾，不受影响。
+tests/**/Results/**/*_.stl
+tests/**/Results/**/*_.json
