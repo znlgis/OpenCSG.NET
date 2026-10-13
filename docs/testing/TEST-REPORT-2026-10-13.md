@@ -90,3 +90,44 @@ CSG 尺寸 (X=10, Y=20, Z=30) → `CsgMesh` 做 Y↔Z 后网格包围盒 X=[−5
 - 新增用例：`tests/OpenCSG.NET.Tests/Views/ViewBridgeTest.cs`（5 个用例，全过）。
 - 套件结果：115 通过 / 0 失败 / 0 跳过（本次基线 110 + 新增 5）。
 - 缺陷：无新增（`tests/DEFECTS.md` 未变更，仍为空表）—— 手推导与实现一致，无「文档 vs 实现」冲突。
+
+## Task 6 — netstandard2.0 消费面（ApiCompat）+ 整解决方案构建
+
+新增 `tests/OpenCSG.NET.ApiCompat`（`netstandard2.0` + `LangVersion 9.0` + `Nullable enable` + `TreatWarningsAsErrors`，仅引用库工程，**不加任何依赖**）—— 仓库首个从 `netstandard2.0` 侧编译的消费方。
+
+### 结论：消费面可用（brief Step 3 的分支 (a)，不是 (b)）
+
+| 检查 | 实测 |
+| --- | --- |
+| brief 原文探针（未加 polyfill） | `OpenCSG.NET.ApiCompat -> ...\netstandard2.0\OpenCSG.NET.ApiCompat.dll`；**0 警告 0 错误** |
+| 补测：消费库 record 的 `init` 访问器（`with` 表达式 + 对象初始化器） | **0 警告 0 错误**（探针内 `TouchRecordInitSurface`） |
+| 补测：消费方在自身 netstandard2.0 编译单元内**声明** `record` / `init` 成员 | **CS0518**「预定义类型 System.Runtime.CompilerServices.IsExternalInit 未定义或导入」 |
+| 隔离复现：一个**不引用**本库、只声明 `record IsoRecord(double X)` 的 netstandard2.0 工程 | 同样 **CS0518**（2 个错误） |
+
+- 库的公共 API 面（含 `CsgNode` / `Profile2D` 全部 record 的 `init` 访问器）可从 `netstandard2.0` 正常**消费**：编译器从库元数据解析 `modreq(IsExternalInit)` 并完成绑定，消费方无需自备 polyfill；库内那份 polyfill 是 `internal`（`src/OpenCSG.NET/CsgNode.cs:3-7`）也不影响消费。
+- CS0518 只在消费方于自身编译单元内**声明** `record` / `init` 成员时出现，且与本库无关（隔离复现已证明）。这是 C# 语言在 netstandard2.0 / .NET Framework 上的既有要求，**不是本库的 API 缺陷**，故**未登记 `DEFECT-nnn`**，`tests/DEFECTS.md` 未变更（仍为空表）。
+- 结论措辞：库不需要为消费者补 `public IsExternalInit`；需要自带 polyfill 的是「自己声明 record / init 的 netstandard2.0 消费方」，与是否引用本库无关。
+
+### 整解决方案构建（含 ApiCompat 共 7 个工程）
+
+`dotnet build OpenCSG.NET.slnx -c Release`：7 个工程全部成功，**0 警告 0 错误**。
+
+| 工程 | TFM | 结果 |
+| --- | --- | --- |
+| `src/OpenCSG.NET` | netstandard2.0 | 成功 |
+| `tests/OpenCSG.NET.ApiCompat` | netstandard2.0 | 成功 |
+| `tests/OpenCSG.NET.TestKit` | net8.0 | 成功 |
+| `tests/OpenCSG.NET.Tests` | net8.0 | 成功 |
+| `perf/OpenCSG.NET.PerfTest` | net8.0 | 成功 |
+| `samples/Runner.CPurlin` | net8.0 | 成功 |
+| `samples/Runner.Examples` | net8.0 | 成功 |
+
+samples 与 perf 编译通过，**无新发现**。注：CI 至今只构建 `src/OpenCSG.NET/OpenCSG.NET.csproj`，但这两者在本地已由 Task 2 的 `dotnet build OpenCSG.NET.slnx`（task-2-report.md §Step 6，0 警告 0 错误）编译过；其后 `src/` 无任何提交，故本轮为对同一 API 面的复现，而非首次编译。
+
+### 套件与结果目录
+
+| 指标 | 值 |
+| --- | --- |
+| 通过 / 失败 / 跳过 / 总计 | 122 / 0 / 0 / 122（与 122/0/0 基线一致） |
+| `tests/OpenCSG.NET.Tests/Results/` | 45 个 `.stl`，目录条目 45，构建与测试后均无残留 |
+| ApiCompat 单独构建 | 0 警告 0 错误（Step 4 的 grep 仅命中汇总行「0 个警告 / 0 个错误」） |
