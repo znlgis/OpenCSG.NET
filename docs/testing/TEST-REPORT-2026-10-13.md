@@ -301,3 +301,62 @@ Normal 档 40 个种子全部通过，A∩A/A−A/差集恒等式全部通过 �
 - 语料豁免：`CasesWithDefectExclusions` 按 seed 下标对 16 + 19 个具体失败用例打 `TestCaseData.Explicit("DEFECT-003: …")`
   （brief Step 4 允许的唯一豁免形式，理由写在代码注释与 DEFECTS.md）；A∪A 与 A∩A/A−A 拆成两个方法，
   使仍有效的断言不连坐（controller 决定 2(i) 的拆分偏好）。
+
+## Plan B1 · Task 8：Tier 1（续）—— 变换等价 / 包围盒 / 序列化往返 / 相等契约 / 平面分割
+
+`tests/OpenCSG.NET.TestKit/Oracles/TransformAssert.cs`（变换/包围盒 oracle，5 个公共入口）
++ `tests/OpenCSG.NET.SystemTests/Property/Tier1TransformIdentityTest.cs`（9 个方法：5 个语料驱动 × 64 Smoke 种子 = 320 用例，
+加 4 个单例 = 324 用例）。下表为默认运行口径。
+
+| 恒等式家族 | 用例数 | 通过 | 失败 | 备注 |
+| --- | --- | --- | --- | --- |
+| 包围盒代数 bbox(A∪B) = bbox(A)∪bbox(B)、bbox(A∩B) ⊆ bbox(A)∩bbox(B) | 64 | 64 | 0 | **Survey 档全部通过，无需 DEFECT-003 豁免**（见下） |
+| 变换等价 V(k·A)=k³V(A) / 旋转 / 镜像（仍朝外）/ 平移 + bbox 精确平移 | 64 | 64 | 0 | 单实体路径，无布尔；Survey 24 个种子全过 |
+| 镜像对合 mirror(mirror A) ≅ A | 64 | 64 | 0 | 多边形数/顶点数精确相等，面积/体积/bbox 按 0 容差基准比 |
+| 序列化往返 Evaluate(FromJson(ToJson(n))) ≅ Evaluate(n) | 64 | 64 | 0 | NodeGen 树（extent ≈1–10、±10 平移，Normal 量级） |
+| 紧凑/缩进 JSON 求值同形 | 64 | 64 | 0 | 同上 |
+| `Plane.SplitPolygon` 分区面积守恒 | 1 | 1 | 0 | 见「输入修正」说明 |
+| 5 个 Type 码可达且逐码语义正确 | 1 | 1 | 0 | 实测 seen={0,1,2,3,4}；见「输入修正」说明 |
+| Vector3D/Vector2D Equals/GetHashCode 契约一致 | 1 | 1 | 0 | 含 ±0.0 组合；无缺陷 |
+| Vector3D 拒绝 NaN（3 个分量各一） | 1 | 1 | 0 | `ArgumentOutOfRangeException` 按文档抛出 |
+
+合计 324 用例 / 324 通过 / 0 失败 / 0 豁免（`SystemTests` 全套：826 通过、0 失败、100 个 DEFECT 豁免用例 NotExecuted）。
+
+**与计划预期的偏差（实测事实）**
+
+1. **DEFECT-003 未在包围盒代数行触发，因此没有新增失败 seed、也没有任何逐 case 豁免。** brief 警告块预期
+   `bbox(A∪B)`/`bbox(A∩B)` 两行会在 Survey 档撞上 DEFECT-003；实测 64/64 全过。原因（探针 `artifacts/task8probe`，
+   gitignored、不入库）：DEFECT-003 的破坏是**面级**的（重合面重复保留或整面丢失），而 bbox 是**顶点集级**的量 ——
+   去掉一个面不会去掉撑住极值的顶点（其余相邻面仍带这些顶点）。探针对 24 个 Survey 种子逐对跑 `GeometryAssert.Analyze`：
+   18 个种子的并集确有损坏指纹（如 index 41 = 142 条单用边、index 53 = 1158 个多边形），但 24 个种子的
+   `bbox(A∪B)` 期望值与 `bbox(A∩B)` 包含关系全部成立。
+2. **变换等价族 Survey 全过**（与 brief 预期一致）：`Translate(12.5,−7.25,3.125)` 与沿轴 k=2.5 缩放都不经过布尔路径；
+   镜像分支的 `Scale(−1,1,1)` 与 `SolidGen.Materialize` 的镜像路径（Task 3 已验收）一致，体积仍为正。
+3. 序列化往返族 64/64 全过（brief 预期一致，未发现 `CsgSerialization`/`CsgEvaluator` 缺陷）。
+4. **两个平面分割用例的输入与库的 `SplitPolygon` 契约不符（brief 文本缺陷，不是库缺陷；未登记缺陷）。** 探针原始输出：
+   `polygon.Plane → Type=0`、`Plane(x=100) → Type=3`、`Plane(x=−100) → Type=2`、`Plane(x=0) → Type=2`。
+   - `PlaneSplitPolygon_PartitionAreasMatch` 里 `polygon.Plane.SplitPolygon(polygon, …)`（局部 `plane` 未使用）⇒
+     `this` 等于多边形自身平面 ⇒ 每次都得 Type=0 并落入 `default: Assert.Fail`。改为按注释意图调用 `plane`。
+   - 同用例按 `result.Front == null ? 0.0 : …` 取面积，隐含「Type=2/3 会填 Front/Back」；库的契约相反：
+     Type=2/3 表示整片落在该侧、`Front`/`Back` 保持 null（`Tree.SplitPolygonByPlane` 的 case 2/3 直接把原多边形入桶），
+     只有 Type=4 产出两片。按契约修正取片口径（`front`/`back` 的 6 条断言逐字未动）。
+   - `PlaneSplitPolygon_AllFiveTypeCodesAreReachable` 的三条输入与断言错位：正方形占 x∈[0,4]，`Plane(x=+100)`
+     整片在后（实际 3，而该变量按「全前」断言 2）、`Plane(x=−100)` 整片在前（实际 2，断言 3）、`Plane(x=0)` 只与一条边相切
+     （实际 2，断言 4）⇒ 5 个码里 **4 不可达**。修正：两条单侧平面的偏移镜像互换、跨越平面改用 x=2（严格穿过多边形内部）。
+     5 条 `Assert.That(…Type…)` 逐字保留，实测全部成立、5 码全可达 ⇒ 判为 brief 的输入错误而**非**「注释与实现不符」。
+   - 三处改动的共同点：只改**输入取值/取片口径**，不改任何期望值、不删任何用例。
+5. **`Vector3D`/`Vector2D` 相等契约与 NaN 校验全部通过（无缺陷）。** `Vector3D` 未重写 `GetHashCode`，±0.0 由 `==` 判为相等；
+   实测本运行时 `ValueType.GetHashCode` 对 `(−0,0,0)`、`(0,−0,0)`、`(0,0,0)` 返回**同一个**哈希（−1838133773），故契约成立。
+   该一致性依赖运行时实现（按字段低 32 位取哈希），非语言保证 —— 仅作观察项，不登记缺陷。
+
+**松弛结论（controller 决定 3 要求）**：`AssertBoundingBoxAlgebra` 逐轴用 `tolerance · max(1,|坐标|)` 缩放（brief 原文，
+含 `max(|minA.X|,|maxB.X|)` 这一混取写法）；实测 64 个种子（含 24 个 1e6 量级）**无一失败** ⇒ 判定为松弛足够、未作任何修改。
+
+**遗留问题（不在本任务范围，已按发现上报）**：Task 7 的 `InclusionExclusion_OnFsCheckGeneratedSpecs` 是随机探索用例
+（每次运行换 FsCheck 种子，`MaxTest=200`），在本任务的改动**整体移出工程后**复测 8 次仍失败 4 次（≈50%），
+反例 `(sizeSeed=13, offsetSeed=10, rotationSeed=0, kindSeed=183)` 与 `(6, 11, 0, 4)`。
+归因（探针 `artifacts/task8probe fscheck`）：T 顶点接缝实体的体积读数随参考点线性漂移，并集实测 `dV_U/dref = (0, 1.00e-5, 0)`，
+残差 ≈ 裂缝面积(1.0e-5) × 参考点距裂缝距离(~75 单位) ≈ 7.5e-4；同一操作数换序 `B∪A` 无漂移（1e-12 量级），
+A、B 与交集自身严格闭合（singleUse=0），并集输出无重复面、无退化面，隐含裂缝宽度 = |g|/总边长 = 6.1e-9，
+低于库容差 1e-5 五个数量级。⇒ 判为 **oracle 精度/参考点课题（Task 7 已记录过的 class (ii)）**，不是 DEFECT-003
+（Normal 档、无重复面），也**未登记新缺陷**；修复涉及 Task 7 的冻结文件（`Tier1BooleanIdentityTest.cs`），交 controller 决定。
