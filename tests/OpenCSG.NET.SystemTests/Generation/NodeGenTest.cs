@@ -1,0 +1,95 @@
+using Csg;
+using Csg.Test;
+using NUnit.Framework;
+
+namespace Csg.Test
+{
+    [TestFixture]
+    public class NodeGenTest
+    {
+        [Test]
+        public void Random_SameSeed_ProducesEquivalentTree()
+        {
+            var jsonA = CsgSerialization.ToJson(NodeGen.Random(4242), indented: false);
+            var jsonB = CsgSerialization.ToJson(NodeGen.Random(4242), indented: false);
+
+            Assert.That(jsonB, Is.EqualTo(jsonA), "同种子必须产出同一棵树（JSON 相同即结构相同）");
+        }
+
+        [Test]
+        [Explicit("DEFECT-002: 空操作数的 Subtract/Intersect 语义错误（empty−X 返回反向的 X、empty∩X 返回 X）")]
+        public void Random_TreesAreEvaluableAndOutwardFacing()
+        {
+            for (long seed = 0; seed < 24; seed++)
+            {
+                var tree = NodeGen.Random(seed);
+                var solid = CsgEvaluator.Evaluate(tree);
+
+                Assert.That(solid.Polygons.Count, Is.GreaterThan(0), $"seed={seed} 产出空实体");
+                Assert.That(GeometryAssert.SignedVolume(solid), Is.GreaterThan(0),
+                    $"seed={seed} 有向体积必须为正；树：{CsgSerialization.ToJson(tree, indented: false)}");
+            }
+        }
+
+        [Test]
+        public void Random_CoversAllNodeAndProfileTypes()
+        {
+            var nodeTypes = new System.Collections.Generic.HashSet<string>();
+            var profileTypes = new System.Collections.Generic.HashSet<string>();
+
+            for (long seed = 0; seed < 512; seed++)
+            {
+                var json = CsgSerialization.ToJson(NodeGen.Random(seed), indented: false);
+                foreach (var candidate in new[]
+                {
+                    "Box", "Sphere", "Cylinder", "Cone", "Extrude", "Wedge",
+                    "Union", "Subtract", "Intersect", "Transform",
+                })
+                    if (json.Contains($"\"$type\": \"{candidate}\"") || json.Contains($"\"$type\":\"{candidate}\""))
+                        nodeTypes.Add(candidate);
+
+                foreach (var candidate in new[]
+                {
+                    "Rectangle", "HBeam", "Channel", "SquareTube", "Trapezoid", "Capsule", "LShape",
+                })
+                    if (json.Contains(candidate))
+                        profileTypes.Add(candidate);
+            }
+
+            Assert.That(nodeTypes.Count, Is.GreaterThanOrEqualTo(9),
+                $"512 个种子应覆盖至少 9 种节点类型，实际：{string.Join(",", nodeTypes)}");
+            Assert.That(profileTypes.Count, Is.GreaterThanOrEqualTo(5),
+                $"应覆盖至少 5 种截面，实际：{string.Join(",", profileTypes)}");
+        }
+
+        [Test]
+        public void Random_RespectsDepthLimit()
+        {
+            for (long seed = 0; seed < 64; seed++)
+            {
+                var tree = NodeGen.Random(seed, maxDepth: 3);
+                Assert.That(Depth(tree), Is.LessThanOrEqualTo(3), $"seed={seed} 超过深度上限");
+            }
+        }
+
+        static int Depth(CsgNode node)
+        {
+            switch (node)
+            {
+                case UnionNode u: return 1 + MaxDepth(u.Children);
+                case SubtractNode s: return 1 + MaxDepth(s.Children);
+                case IntersectNode i: return 1 + MaxDepth(i.Children);
+                case TransformNode t: return 1 + Depth(t.Child);
+                default: return 1;
+            }
+        }
+
+        static int MaxDepth(System.Collections.Generic.IReadOnlyList<CsgNode> children)
+        {
+            var max = 0;
+            foreach (var child in children)
+                max = System.Math.Max(max, Depth(child));
+            return max;
+        }
+    }
+}
