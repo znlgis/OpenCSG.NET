@@ -238,7 +238,7 @@ spec §13 明确要求：加生成器**之前**先把 TestKit 目录布局按 §
 - Consumes: 无
 - Produces:
   - `Csg.Test.GoldenPaths.ResultsDirectory(string anchorPath, string markerFileName = "OpenCSG.NET.Tests.csproj") → string?`
-  - `Csg.Test.TessellationScope : IDisposable`，ctor `(double chordTolerance)`；`Dispose()` 复位为 0
+  - `Csg.Test.TessellationScope : IDisposable`，ctor `(double chordTolerance)`；`Dispose()` **恢复为构造时捕获的先前值**（不是复位为 0 —— 用例会嵌套 scope，复位会静默关掉外层）
   - `DEFECT-001`（`ViewArcFitter` 静态态非线程隔离）
 
 - [ ] **Step 1: 纯搬迁（几何不变）**
@@ -333,6 +333,7 @@ dotnet test tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj -c Release 2>&1 | t
 `tests/OpenCSG.NET.Tests/Tessellation/TessellationScopeTest.cs`（新目录）：
 
 ```csharp
+using System;
 using Csg;
 using Csg.Test;
 using NUnit.Framework;
