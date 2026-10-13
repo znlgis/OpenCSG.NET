@@ -263,3 +263,41 @@ Shrunk:
 - `meshEuler` 只在严格流形网格上可解释：该 caveat 已写入 DataGen 的指标注释
   （`tools/OpenCSG.NET.DataGen/Program.cs`，仅注释，corpus.json 保持逐字节相同，
   sha256 `2c3793c3…aff3`）。九个异常 spec 按要求**保留**在 corpus.json 中。
+
+## Plan B1 · Task 7：Tier 1 布尔恒等式
+
+`tests/OpenCSG.NET.TestKit/Oracles/IdentityAssert.cs`（恒等式 oracle，相对容差 1e-9·V）+
+`tests/OpenCSG.NET.SystemTests/Property/Tier1BooleanIdentityTest.cs`（10 个方法：8 个语料驱动 + 1 个 FsCheck 驱动 + 1 个空操作数）。
+下表为**默认运行**（`dotnet test tests/OpenCSG.NET.SystemTests -c Release`）的口径：豁免用例计跳过不计失败。
+
+| 恒等式 | 用例数 | 通过 | 失败 | 备注 |
+| --- | --- | --- | --- | --- |
+| 包含排斥 V(A∪B)=V(A)+V(B)−V(A∩B) | 65 | 49 | 0 | 含 1 个 FsCheck 驱动用例（MaxTest=200，通过）；16 个 Survey 种子命中 DEFECT-003 → `[Explicit]` |
+| 差集 V(A−B)=V(A)−V(A∩B) | 64 | 64 | 0 | |
+| 单调性 | 64 | 64 | 0 | |
+| 交换律 | 64 | 64 | 0 | 容差与 IdentityAssert 同口径按体积缩放（实测唯一失败 seed=41 相对偏差 4.8e-11，在 1e-9 预算内） |
+| 不修改操作数 | 64 | 64 | 0 | |
+| 自反/单位元/零元 | 192 | 109 | 0 | A∪A：19 个 Survey 种子命中 DEFECT-003 → `[Explicit]`；A∩A/A−A 全部通过；空操作数 64 个 → `[Explicit]` DEFECT-002 |
+| 结果绕序一致 | 64 | 64 | 0 | 允许 T 顶点接缝 |
+
+发现的缺陷：DEFECT-003（新发现，见 `tests/DEFECTS.md`）—— Survey 档（|坐标| ≈ 1e6）`Solid.Union` 对重合面重复保留或整体丢失，
+A∪A 体积偏差 8%–47%，最小片段 `Solids.Cube(10, center: true).RotateY(30).Translate(1e6, 0, 0)` 的自并集体积为 7/6·V(A)；
+Normal 档 40 个种子全部通过，A∩A/A−A/差集恒等式全部通过 —— 破坏限定在并集路径。
+
+### Task 7 的一次性归因（探针在 `artifacts/probe`，gitignored，不入库）
+
+- **DEFECT-003（类 (i) 真实缺陷）**：最小片段在平移 1e5 时并集精确、1e6 时损坏（阈值在两档之间）；
+  并集输出含**逐位相同**的重复多边形（oracle 无法制造重复面）⇒ 输出数据本身损坏，与体积 oracle 无关。
+  语料面：A∪A 失败 19/24 个 Survey 种子（8%–47%），包含排斥失败 16 个种子（2e-9…9.1e-4 相对，其中 15 个交集为空集 ——
+  不相交实体对的并集多计/少计体积同样违反恒等式）。Normal 40 个种子全过。
+- **类 (ii) 口径修正 I（oracle 参考系）**：FsCheck 收缩反例（`sizeSeed=6 offsetSeed=0 rotationSeed=0 kindSeed=94`）是一对
+  bbox 不相交的实体，其并集走「不相交拼接」路径：多边形数据逐位相同（delta ≤ 1e-15），
+  但布尔构造件（方管 = outer−inner）带 T 顶点接缝，有向体积读数随参考点线性漂移（实测 A 的读数斜率 −6.7e-6/单位，沿 X 不漂移），
+  恒等式两侧各用自身包围盒中心 ⇒ 参考系不一致产生 1.3e-3 的假偏差。修正：`IdentityAssert` 每个恒等式的所有项改用**同一参考点**
+  测量（并集/差集自身包围盒中心；`SignedVolumeAt` 与 `GeometryAssert.SignedVolume` 在同一参考点上逐位相同），容差口径未动。
+- **类 (ii) 口径修正 II（绝对容差不可达）**：交换律（seed=41_Survey，V≈1.49e9）与自反 A∩A（seed=56_Survey，V≈7.26e6，
+  相对偏差 4.2e-12）在绝对 1e-6 下失败 —— 1e-6/1.49e9 = 6.7e-16 低于 double 精度。修正：这两处比较改用
+  `max(Tol, 1e-9·V)`（与 IdentityAssert 同口径），相对预算未放松。
+- 语料豁免：`CasesWithDefectExclusions` 按 seed 下标对 16 + 19 个具体失败用例打 `TestCaseData.Explicit("DEFECT-003: …")`
+  （brief Step 4 允许的唯一豁免形式，理由写在代码注释与 DEFECTS.md）；A∪A 与 A∩A/A−A 拆成两个方法，
+  使仍有效的断言不连坐（controller 决定 2(i) 的拆分偏好）。
