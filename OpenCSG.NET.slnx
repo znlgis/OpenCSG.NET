@@ -15,4 +15,7 @@
     <Project Path="tests/OpenCSG.NET.SystemTests/OpenCSG.NET.SystemTests.csproj" />
     <Project Path="tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/OpenCSG.NET.DataGen/OpenCSG.NET.DataGen.csproj" />
+  </Folder>
 </Solution>

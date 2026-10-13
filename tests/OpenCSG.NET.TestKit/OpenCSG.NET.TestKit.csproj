@@ -14,4 +14,8 @@
     <ProjectReference Include="..\..\src\OpenCSG.NET\OpenCSG.NET.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Generation\corpus.json" Link="corpus.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
