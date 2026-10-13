@@ -2309,7 +2309,10 @@ git commit -m "test: 三档语料（64/512/环境变量驱动）+ corpus.json + 
 
 **Files:**
 - Create: `tests/OpenCSG.NET.TestKit/Oracles/IdentityAssert.cs`
+- Create: `tests/OpenCSG.NET.TestKit/InternalsVisibleTo.cs`
 - Create: `tests/OpenCSG.NET.SystemTests/Property/Tier1BooleanIdentityTest.cs`
+
+`InternalsVisibleTo.cs` 是必需补漏：FsCheck 属性的 `SpecFrom` 助手要用 Task 3 故意设为 `internal` 的 `SplitMix64`，而 `SystemTests` 看不到它；TestKit 的 `.csproj` 冻结不可改 —— 因此最小修复是在 TestKit 里加一条只授权 `OpenCSG.NET.SystemTests` 的友元装配声明。被否决的备选：在测试里内联一份 PRNG 副本会重复 Task 3 的代码并悄悄改变 FsCheck→spec 映射；把 `SplitMix64` 改成 `public` 会把暴露面扩大到所有消费者。
 
 **Interfaces:**
 - Consumes: `GeometryAssert`、`SolidGen`、`Corpus`
@@ -2534,7 +2537,7 @@ namespace Csg.Test
 dotnet test tests/OpenCSG.NET.SystemTests/OpenCSG.NET.SystemTests.csproj -c Release --filter "FullyQualifiedName~Tier1BooleanIdentityTest" 2>&1 | tail -12
 ```
 
-预期：编译失败 —— `CS0246: 未能找到类型或命名空间名"IdentityAssert"`。
+预期：编译失败 —— `CS0103: 当前上下文中不存在名称"IdentityAssert"`（测试文件已含 `using Csg.Test;`，找不到的是名称而非命名空间）。
 
 - [ ] **Step 3: 实现 IdentityAssert**
 
@@ -2671,13 +2674,15 @@ namespace Csg.Test
 dotnet test tests/OpenCSG.NET.SystemTests/OpenCSG.NET.SystemTests.csproj -c Release --filter "FullyQualifiedName~Tier1BooleanIdentityTest" 2>&1 | tail -30
 ```
 
-预期：7 个测试方法 × 64 个种子 = **448 个用例**全过。
+预期：9 个语料驱动方法 × 64 个种子 + 1 个 FsCheck 属性用例 = **577 个用例**，其中 **478 通过 + 99 跳过**（跳过全部来自 `[Explicit]` 豁免：16 个包含排斥 Survey 种子与 19 个 A∪A Survey 种子命中 DEFECT-003，64 个空操作数用例命中 DEFECT-002）。按方法（通过+跳过）：`InclusionExclusion 48+16`、`DifferenceIdentity 64`、`Monotonicity 64`、`FsCheck 1`、`Commutativity 64`、`BooleanDoesNotMutate 64`、`Idempotence_UnionSelf 45+19`、`Idempotence_IntersectAndSubtract 64`、`IdentityElement_WithEmptyOperand 0+64`、`ResultsAreOrientedConsistently 64`。
 
 **这是本计划最可能发现真缺陷的一步。** 若某条恒等式失败：
 - 断言消息里已含 seed、tier 与全部四个体积，**这就是最小复现凭据**。
 - **不要**改容差、不要改期望、不要把该 seed 从语料里剔除。
 - 登记 `DEFECT-nnn` 到 `tests/DEFECTS.md`（现象写清哪条恒等式、差值多少、seed 与 tier），把**该具体失败**的 `[TestCaseData]` 用 `[Explicit]` 排除（在 `SmokeCases()` 里对该 index `yield break` 并注释引用 DEFECT 编号 —— 这是唯一被允许的语料豁免方式，且必须写明理由）。
 - 在报告里单独成段记录。
+
+**实现修订（已接受）**：语料豁免未采用上面 bullet 的 `yield break` 形式，而是由共享工厂 `CasesWithDefectExclusions` 对**具体失败用例**直接打 `TestCaseData.Explicit("DEFECT-nnn: …")` —— `[Explicit]` 语义相同（默认运行同样跳过），且失败用例仍可被 `--filter` 按名显式选中复跑（`tests/DEFECTS.md` 登记的一行复现命令依赖这一点）；controller 判定为等价或更优的偏差，Task 8–10 可直接采用该工厂形式。
 
 - [ ] **Step 5: 记录 Tier 1 结果**
 
@@ -2710,8 +2715,8 @@ grep -n "填实际" docs/testing/TEST-REPORT-2026-10-13.md
 - [ ] **Step 6: 提交（已授权）**
 
 ```bash
-git add tests/OpenCSG.NET.TestKit/Oracles/IdentityAssert.cs tests/OpenCSG.NET.SystemTests tests/DEFECTS.md docs/testing
-git commit -m "test: Tier 1 布尔恒等式属性测试（448 用例）"
+git add tests/OpenCSG.NET.TestKit/Oracles/IdentityAssert.cs tests/OpenCSG.NET.TestKit/InternalsVisibleTo.cs tests/OpenCSG.NET.SystemTests tests/DEFECTS.md docs/testing
+git commit -m "test: Tier 1 布尔恒等式属性测试（577 用例）"
 ```
 
 ---
