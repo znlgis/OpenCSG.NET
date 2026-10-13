@@ -1018,6 +1018,227 @@ git commit -m "test: SolidSpec/SolidGen 生成器（种子可复现、档位采�
 
 ---
 
+### Task 3B: 修复 SignedVolume 的大坐标数值不稳定（新增任务）
+
+**为什么新增**：Task 3 实测发现 `GeometryAssert.SignedVolume` 用**全局原点**做散度定理参考点，坐标 ~1e6 时每项量级 ~1e18 而真实体积只有 ~1e1 ⇒ 双精度（约 15.9 位有效数字，1e18 处 ULP≈128）下体积被抵消误差吞掉。证据：`Solids.Sphere(r=1, res=48)` 平移 1e6 后读到 **780.4**（真值 4.159）；平移到 (1e6, −2e6, 3e6) 读到 **−6089.98**（负体积）；3072 个 Survey 探针里 12 个读到 ≤0，改用**相对包围盒中心**重算后 0/3072。这是**oracle 缺陷，不是库缺陷**（同一批实体相对自身包围盒中心都测得正值，说明绕序正确）。
+
+**为什么必须现在修**：Tasks 6/7/8/10 都要在 Survey 档上断言体积（Task 6 的语料校验遍历 512 条含 Survey 的 spec 并断言 `SignedVolume > 0`）。不修会产生**假缺陷** —— 把 oracle 的抵消误差记成库的 bug。这是 plan defect，不是打磨。
+
+**为什么可以改 `GeometryAssert`**：Plan A 冻结过它的断言逻辑，目的是保证那次搬迁是纯搬迁、既有 122 个用例语义不变。现在这是一次**有裁定、有理由、有验证计划**的定向修改，且 §13 本就写明 Plan C 可以扩展它 —— 只是提前到 B1 执行。改动只针对 `SignedVolume` 的积分参考点，不动任何阈值、不动断言强度。
+
+- [ ] **Step 1: 写失败的测试**
+
+`tests/OpenCSG.NET.Tests/Oracles/SignedVolumeInvarianceTest.cs`（新目录）：
+
+```csharp
+using Csg;
+using Csg.Test;
+using NUnit.Framework;
+
+namespace Csg.Test
+{
+    /// <summary>
+    /// 体积 oracle 的数值口径。
+    /// 散度定理用**全局原点**做参考点时，离原点很远的实体（测绘坐标 ±1e6）会出现灾难性抵消：
+    /// 每项量级 ~1e18 而真实体积 ~1e1，双精度在 1e18 处的 ULP≈128，体积被舍入噪声吞掉。
+    /// 改用**相对包围盒中心**的局部参考点后，对闭合曲面数值不变而条件数大幅改善。
+    /// </summary>
+    [TestFixture]
+    public class SignedVolumeInvarianceTest
+    {
+        const double SurveyOffset = 1_000_000.0;
+
+        [Test]
+        public void SignedVolume_IsTranslationInvariant()
+        {
+            var sphere = Solids.Sphere(new SphereOptions
+            {
+                Center = new Vector3D(0, 0, 0), Radius = 1, Resolution = 48,
+            });
+            var moved = sphere.Translate(SurveyOffset, -2 * SurveyOffset, 3 * SurveyOffset);
+
+            var atOrigin = GeometryAssert.SignedVolume(sphere);
+            var displaced = GeometryAssert.SignedVolume(moved);
+
+            Assert.That(atOrigin, Is.EqualTo(4.18879).Within(0.02), "原点处应接近球体积 4π/3");
+            Assert.That(displaced, Is.EqualTo(atOrigin).Within(System.Math.Abs(atOrigin) * 1e-6),
+                $"平移不改变体积：原点 {atOrigin:R}，平移后 {displaced:R}");
+            Assert.That(displaced, Is.GreaterThan(0),
+                "平移 1e6 后仍必须为正 —— 负值说明积分参考点仍在全局原点");
+        }
+
+        [Test]
+        public void SignedVolume_SurveyTierPrimitives_AreAllPositive()
+        {
+            for (var i = 0; i < 32; i++)
+            {
+                var spec = SolidGen.Random(i * 977 + 13, CoordTier.Survey);
+                var solid = SolidGen.Materialize(spec);
+
+                Assert.That(GeometryAssert.SignedVolume(solid), Is.GreaterThan(0),
+                    $"seed-index {i}: Survey 档实体的有向体积必须为正；spec={spec}");
+            }
+        }
+
+        [Test]
+        public void MeshSignedVolume_IsTranslationInvariant()
+        {
+            var sphere = Solids.Sphere(new SphereOptions
+            {
+                Center = new Vector3D(0, 0, 0), Radius = 1, Resolution = 48,
+            });
+            var moved = sphere.Translate(SurveyOffset, 0, 0);
+
+            var atOrigin = MeshAssert.SignedVolume(CsgMesh.TrianglesOf(sphere));
+            var displaced = MeshAssert.SignedVolume(CsgMesh.TrianglesOf(moved));
+
+            Assert.That(displaced, Is.EqualTo(atOrigin).Within(System.Math.Abs(atOrigin) * 1e-6),
+                $"网格侧平移不改变体积：{atOrigin:R} vs {displaced:R}");
+        }
+    }
+}
+```
+
+- [ ] **Step 2: 跑测试确认失败**
+
+```bash
+dotnet test tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj -c Release --filter "FullyQualifiedName~SignedVolumeInvarianceTest" 2>&1 | tail -20
+```
+
+预期：`SignedVolume_IsTranslationInvariant` 与 `MeshSignedVolume_IsTranslationInvariant` 失败，且失败信息里平移后的值约 780（不是 4.19）—— 这正是要修的症状。
+
+- [ ] **Step 3: 实现平移不变的 `GeometryAssert.SignedVolume`**
+
+`tests/OpenCSG.NET.TestKit/Oracles/GeometryAssert.cs` 里把 `SignedVolume` 替换为：
+
+```csharp
+        /// <summary>
+        /// 散度定理净体积 V = Σ v0·(v1×v2)/6（多边形按首顶点扇形剖分）。
+        /// **参考点取包围盒中心**，而不是全局原点：对闭合曲面该值与参考点无关，
+        /// 但用原点做参考时，离原点很远的实体（测绘坐标 ±1e6）每项量级 ~1e18、
+        /// 真实体积仅 ~1e1，双精度在 1e18 处的 ULP≈128 会直接把体积吞掉
+        /// （实测：r=1 球平移 1e6 后读到 780.4，平移 (1e6,−2e6,3e6) 后读到 −6089.98）。
+        /// </summary>
+        public static double SignedVolume(Solid solid)
+        {
+            if (solid.Polygons.Count == 0)
+                return 0.0;
+
+            var (boundMin, boundMax) = Bounds(solid);
+            var reference = (boundMin + boundMax) * 0.5;
+
+            double volume = 0;
+            foreach (var polygon in solid.Polygons)
+            {
+                var v = polygon.Vertices;
+                if (v.Count < 3)
+                    continue;
+                var v0 = v[0].Pos - reference;
+                for (int i = 1; i < v.Count - 1; i++)
+                    volume += Dot(v0, Cross(v[i].Pos - reference, v[i + 1].Pos - reference));
+            }
+            return volume / 6.0;
+        }
+```
+
+**只改参考点，不改公式结构、不改 `/6.0`、不新增阈值。** 其余方法一律不动。
+
+- [ ] **Step 4: 实现平移不变的 `MeshAssert.SignedVolume`**
+
+`tests/OpenCSG.NET.TestKit/Oracles/MeshAssert.cs` 里把 `SignedVolume` 替换为：
+
+```csharp
+        /// <summary>
+        /// 散度定理有向体积（右手绕序 ⇒ 法线朝外 ⇒ 正值）。
+        /// 参考点取包围盒中心 —— 理由与 <see cref="GeometryAssert.SignedVolume"/> 相同：
+        /// 全局原点在测绘坐标下会因抵消误差失去全部精度。
+        /// </summary>
+        public static double SignedVolume(IReadOnlyList<MeshTriangle> triangles)
+        {
+            if (triangles.Count == 0)
+                return 0.0;
+
+            var (boundMin, boundMax) = Bounds(triangles);
+            var rx = (boundMin.X + boundMax.X) * 0.5;
+            var ry = (boundMin.Y + boundMax.Y) * 0.5;
+            var rz = (boundMin.Z + boundMax.Z) * 0.5;
+
+            double volume = 0;
+            for (int i = 0; i < triangles.Count; i++)
+            {
+                var a = triangles[i].A;
+                var b = triangles[i].B;
+                var c = triangles[i].C;
+
+                var ax = a.X - rx; var ay = a.Y - ry; var az = a.Z - rz;
+                var bx = b.X - rx; var by = b.Y - ry; var bz = b.Z - rz;
+                var cx = c.X - rx; var cy = c.Y - ry; var cz = c.Z - rz;
+
+                volume += ax * (by * cz - bz * cy)
+                        - ay * (bx * cz - bz * cx)
+                        + az * (bx * cy - by * cx);
+            }
+            return volume / 6.0;
+        }
+```
+
+- [ ] **Step 5: 跑新测试确认通过**
+
+```bash
+dotnet test tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj -c Release --filter "FullyQualifiedName~SignedVolumeInvarianceTest" 2>&1 | tail -12
+```
+
+预期：3 个用例全过。
+
+- [ ] **Step 6: 重跑受影响的大坐标用例并如实报告**
+
+`LargeCoordinateBooleanTest` 与 `LargeCoordinateUnionTest` 在 1e6 上用同一个 oracle 断言体积 —— 它们此前的「通过」可能是运气。现在 oracle 可信了，重跑：
+
+```bash
+dotnet test tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj -c Release --filter "FullyQualifiedName~LargeCoordinate" 2>&1 | tail -25
+dotnet test tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj -c Release 2>&1 | tail -4
+```
+
+**两种结果，各自处置：**
+- **全过** ⇒ README 那句「坐标到 1e6 量级仍正确」得到可信确认。把这一点写进报告（此前只是「在不可信的 oracle 下通过」）。
+- **有失败** ⇒ 这是**真实发现**：库在部分大坐标情形下确实算错（而此前的通过是 oracle 误差掩盖的假绿）。**不要改断言、不要改容差、不要改期望值。** 登记 `DEFECT-nnn`（读 `tests/DEFECTS.md` 取下一个空闲编号），把该用例标 `[Explicit]`，并在报告里给出失败用例名 + 断言消息里的实测值。
+
+- [ ] **Step 7: 记录结果**
+
+在 `TEST-REPORT` 追加：
+
+```markdown
+### Plan B1 · Task 3B：体积 oracle 的数值口径修正
+
+| 项 | 结果 |
+| --- | --- |
+| `GeometryAssert.SignedVolume` 参考点 | 全局原点 → 包围盒中心 |
+| `MeshAssert.SignedVolume` 参考点 | 同上 |
+| r=1 球平移 1e6 的修正前实测值 | <填实际：约 780.4> |
+| 修正后同一位移的实测值 | <填实际：约 4.159> |
+| `LargeCoordinateBooleanTest` / `LargeCoordinateUnionTest` 重跑结果 | <填实际：全过 / 失败用例名 + DEFECT 编号> |
+| 既有大坐标用例的通过是否可信 | <填实际：此前是「在不可信 oracle 下通过」，现在是「可信确认」/ 或已登记缺陷> |
+```
+
+替换全部 `<填实际>` 后：
+
+```bash
+grep -n "填实际" docs/testing/TEST-REPORT-2026-10-13.md
+```
+
+预期：无输出。
+
+- [ ] **Step 8: 提交（已授权）**
+
+```bash
+git add tests/OpenCSG.NET.TestKit/Oracles tests/OpenCSG.NET.Tests/Oracles tests/DEFECTS.md docs/testing
+git commit -m "fix(test): 体积 oracle 改用包围盒中心参考点，修复测绘坐标下的抵消误差"
+```
+
+**完成定义（Task 3B）**：两个 oracle 都平移不变；3 个新用例通过；既有大坐标用例已重跑且结果已如实记录（全过 → 记录可信确认；失败 → 已登记缺陷）；`TEST-REPORT` 零占位符；`src/` 零改动。
+
+---
+
 ### Task 4: NodeGen（种子 → CsgNode 树）
 
 **Files:**
