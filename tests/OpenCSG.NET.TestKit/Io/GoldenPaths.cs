@@ -10,15 +10,14 @@ namespace Csg.Test
     /// </summary>
     public static class GoldenPaths
     {
-        const string Marker = "OpenCSG.NET.Tests.csproj";
-
         /// <summary>
-        /// 从 anchorPath（程序集文件路径或目录路径均可）向上找包含 csproj 标记的目录，
+        /// 从 anchorPath（程序集文件路径或目录路径均可）向上找包含 markerFileName 的目录，
         /// 返回其下 Results/；找不到返回 null。
+        /// marker 可参数化，使 SystemTests 等其它测试程序集也能复用。
         /// </summary>
-        public static string? ResultsDirectory(string anchorPath)
+        public static string? ResultsDirectory(string anchorPath, string markerFileName = "OpenCSG.NET.Tests.csproj")
         {
-            if (string.IsNullOrEmpty(anchorPath))
+            if (string.IsNullOrEmpty(anchorPath) || string.IsNullOrEmpty(markerFileName))
                 return null;
 
             var start = Directory.Exists(anchorPath) ? anchorPath : Path.GetDirectoryName(anchorPath);
@@ -28,7 +27,7 @@ namespace Csg.Test
             var dir = new DirectoryInfo(start);
             while (dir != null)
             {
-                if (File.Exists(Path.Combine(dir.FullName, Marker)))
+                if (File.Exists(Path.Combine(dir.FullName, markerFileName)))
                     return Path.Combine(dir.FullName, "Results");
                 dir = dir.Parent;
             }

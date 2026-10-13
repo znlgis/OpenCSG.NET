@@ -87,5 +87,22 @@ namespace Csg.Test
             Assert.That(pending, Is.Empty,
                 "存在未升级的 golden 残留；先运行 tools/promote-goldens.sh 人工确认后升级");
         }
+
+        [Test]
+        public void GoldenPaths_MarkerIsParameterizable()
+        {
+            var asmPath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+
+            // 用当前工程的标记文件，结果必须与默认调用一致
+            var viaDefault = GoldenPaths.ResultsDirectory(asmPath);
+            var viaExplicit = GoldenPaths.ResultsDirectory(asmPath, "OpenCSG.NET.Tests.csproj");
+
+            Assert.That(viaExplicit, Is.EqualTo(viaDefault));
+
+            // 用一个不存在的标记文件，必须返回 null 而不是抛异常
+            var missing = GoldenPaths.ResultsDirectory(asmPath, "__NoSuchMarker__.csproj");
+
+            Assert.That(missing, Is.Null);
+        }
     }
 }
