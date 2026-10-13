@@ -224,3 +224,42 @@ Shrunk:
 - **计划测试首条断言 `4.18879 ± 0.02` 无法成立**（与参考点无关的计划缺陷）：res=48 内接多面体体积实测 4.15897，与 4π/3 相差 0.0298（0.71% 内接亏格），超出 0.02 容差。按最小改动只把容差改为 0.05（期望值 4.18879 与断言消息未动），该断言仅为量级合理性检查。
 - **Normal 档无行为变化**：原点处读数修正前后逐位相同（4.1589714363410595），`GeometryAssert` 里包围盒中心的参考点对居中原点实体退化为原点；空实体仍走 `return 0.0` 早退。
 - 全量 `OpenCSG.NET.Tests` 129 通过 / 0 失败（基线 126 + 新 3），`OpenCSG.NET.SystemTests` 11 通过 / 0 失败；`Results/` 仍为 45 个 `.stl`、0 个 `*_.stl`；`src/` 零改动。
+
+## Plan B1 · Task 6 — DataGen 列数修正与 `meshEuler = −8` 归因（fix round 1，2026-10-13）
+
+### `metrics.csv` 表头/行字段数不一致（已修复）
+
+`tools/OpenCSG.NET.DataGen --emit` 的表头是 8 列（`index,tier,kind,polygons,volume,meshTriangles,meshEuler,stl`），
+但数据行只写 7 个字段（漏 `tier`），按键读列的使用方会整体错位。修正后每行补上 `tier`，并在
+`Emit` 末尾加入自检：任一行的字段数与表头不一致时当场 `throw InvalidOperationException`
+（负向测试：临时退回 7 字段行，实测抛出
+「metrics.csv 列数不一致：表头 8 列，第 2 行 7 列 → 0,Sphere,32,48.95625050356767,48,2,0000-Sphere.stl」）。
+
+| 检查 | 修正前 | 修正后 |
+| --- | --- | --- |
+| 表头字段数 / 数据行字段数 | 8 / 7 | 8 / 8（513 行全部 8 列） |
+| 按表头读「最小体积」 | 8（错位读了 `meshTriangles` 列） | **1.7133669625621211e-06**（行 117，Normal，Cone） |
+
+### 九个 `meshEuler = −8` 的方管 spec：不是缺陷，网格本就不是严格 2-流形
+
+九个 spec（64/72/82/136 Normal，323/396/428/470/471 Survey）全部为 `Extrude` + `SquareTube`，
+即 `SolidGen.BuildSquareTube` 的 `outer.Subtract(inner)` 布尔路径；其余 503 条 χ = 2。
+一次性探针（`artifacts/probe`，gitignored，未提交、不入库）对 index 64 实测：
+
+| 指标 | 值 |
+| --- | --- |
+| MeshAssert（网格侧）V / E / F | 24 / 64 / 32 |
+| MeshAssert BoundaryEdges / NonManifoldEdges / DuplicatedEdges | **32 / 32 / 0** |
+| MeshAssert EulerCharacteristic（V−E+F） | −8 |
+| 网格无向边使用直方图 | 32 条被 1 个面使用、32 条被恰好 2 个面使用 |
+| GeometryAssert（Solid 侧）SingleUseEdges / TJunctions / SeamEdges | 32 / **16** / 16 |
+| Solid 侧面性质 | 16 个面全部为凸且共面的四边形，fanOverlapRatio=1.0，无环形/非凸面 |
+
+- 结论：网格有 32 条边界边（只被一个三角面使用）与 16 处 Solid 侧 T 顶点结构 —— 即 README
+  「Numerics」记载的布尔 T 顶点接缝。`V−E+F` 在非流形网格上不是拓扑欧拉特征，`meshEuler = −8`
+  是**无意义**而非错误 → **不登记缺陷**（未新增 `DEFECT-003`）。
+- index 136 同现象（12 四边形 + 4 个凸五边形且共面，F=36、boundary=44、T-junctions=20/seam=24、χ 仍 −8）；
+  所有九个 spec χ 全部为 −8、边界边全部 > 0，随分辨率 4–48 与两档坐标不变。
+- `meshEuler` 只在严格流形网格上可解释：该 caveat 已写入 DataGen 的指标注释
+  （`tools/OpenCSG.NET.DataGen/Program.cs`，仅注释，corpus.json 保持逐字节相同，
+  sha256 `2c3793c3…aff3`）。九个异常 spec 按要求**保留**在 corpus.json 中。

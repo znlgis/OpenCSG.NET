@@ -78,6 +78,10 @@ static void WriteCorpus(string path)
         // 观测指标：记录生成当时的结果，供人工检视与 Plan D 的 golden 层使用。
         // 属性测试**不**依赖这些数字（那会让 oracle 退化成自证）；
         // 它们的作用是让「实现漂移」可见。
+        // 注意 meshEuler（V−E+F）只在严格 2-流形网格上可解释：布尔输出可能带 T 顶点接缝
+        // （见 README「Numerics」；SolidGen 的方管走 outer.Subtract(inner)），
+        // 非流形网格上它不是拓扑欧拉特征 —— 九个 -8 方管即此例，归因见
+        // docs/testing/TEST-REPORT-2026-10-13.md「Plan B1 · Task 6」。
         var volume = GeometryAssert.SignedVolume(solid);
         var (min, max) = GeometryAssert.Bounds(solid);
         var mesh = CsgMesh.TrianglesOf(solid);
@@ -99,9 +103,12 @@ static void WriteCorpus(string path)
 static void Emit(string directory)
 {
     Directory.CreateDirectory(directory);
+    // 表头 8 列 ⇒ 每行也必须 8 个字段。早期草稿表头写了 tier 而行里没输出它，
+    // 结果任何按键读列的使用方都会错位（连「最小体积」这类自检都会读到 meshTriangles 那一列）。
     var csv = new StringBuilder("index,tier,kind,polygons,volume,meshTriangles,meshEuler,stl\n");
-
     var specs = Corpus.CorpusSpecs();
+    var normalCount = Corpus.CorpusCaseCount * 5 / 8;
+
     for (var index = 0; index < specs.Count; index++)
     {
         var spec = specs[index];
@@ -109,15 +116,32 @@ static void Emit(string directory)
         var name = $"{index:D4}-{spec.Kind}.stl";
         var path = Path.Combine(directory, name);
 
-        StlWriter.Write(path, CsgMesh.TrianglesOf(solid));
+        var triangles = CsgMesh.TrianglesOf(solid);   // 只构造一次（早期草稿建了两次）
+        StlWriter.Write(path, triangles);
 
-        var edges = MeshAssert.Analyze(CsgMesh.TrianglesOf(solid));
+        var edges = MeshAssert.Analyze(triangles);
+        var tier = index < normalCount ? "Normal" : "Survey";
         csv.Append(CultureInfo.InvariantCulture,
-            $"{index},{spec.Kind},{solid.Polygons.Count},"
+            $"{index},{tier},{spec.Kind},{solid.Polygons.Count},"
             + $"{GeometryAssert.SignedVolume(solid):R},{edges.TriangleCount},{edges.EulerCharacteristic},{name}\n");
     }
 
-    File.WriteAllText(Path.Combine(directory, "metrics.csv"), csv.ToString(),
+    // 自检：表头与每行的字段数必须一致 —— 将来若改列而漏改一边，在这里当场炸掉，
+    // 而不是让下游按键读列时静默错位。
+    var text = csv.ToString();
+    var lines = text.Split('\n');
+    var headerFields = lines[0].Split(',').Length;
+    for (var i = 0; i < lines.Length; i++)
+    {
+        if (lines[i].Length == 0)
+            continue;
+        var fields = lines[i].Split(',').Length;
+        if (fields != headerFields)
+            throw new InvalidOperationException(
+                $"metrics.csv 列数不一致：表头 {headerFields} 列，第 {i + 1} 行 {fields} 列 → {lines[i]}");
+    }
+
+    File.WriteAllText(Path.Combine(directory, "metrics.csv"), text,
         new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-    Console.WriteLine($"已物化 {Corpus.CorpusSpecs().Count} 个模型到 {directory}");
+    Console.WriteLine($"已物化 {specs.Count} 个模型到 {directory}");
 }
