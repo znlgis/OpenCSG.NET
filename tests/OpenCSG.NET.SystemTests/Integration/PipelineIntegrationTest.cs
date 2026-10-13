@@ -30,6 +30,10 @@ namespace Csg.Test
         /// <summary>等价比较的端点容差：实测 0（同一构造序列 ⇒ 逐位一致），此处以 Within(0) 显式钉住。</summary>
         const double ExactTolerance = 0.0;
 
+        /// <summary>绝对读数钉的体积容差：对实测值 ±1e-6（跨平台 libm 对圆柱顶点三角函数的
+        /// 1–2 ulp 扰动 ≪ 此界；对 6000 量级相对 ~2e-10，仍可抓出量级级回归）。</summary>
+        const double VolumePinTolerance = 1e-6;
+
         [TestCase("Box")]
         [TestCase("Cylinder")]
         public void NodePath_AndPrimitivePath_ProduceSameGeometryAndViews(string kind)
@@ -49,6 +53,20 @@ namespace Csg.Test
 
             var byNode = CsgEvaluator.Evaluate(node);
 
+            // 绝对读数钉（防两侧同为空的相等断言空转）：实测 Box 6 多边形/12 三角形/体积 6000，
+            // Cylinder 36 多边形/48 三角形/体积 4607.999999999999。
+            var expectedPolygons = kind == "Box" ? 6 : 36;
+            var expectedTriangles = kind == "Box" ? 12 : 48;
+            var expectedVolume = kind == "Box" ? 6000.0 : 4607.999999999999;
+            Assert.That(byNode.Polygons.Count, Is.EqualTo(expectedPolygons), $"{kind}：节点路径多边形数（实测钉）");
+            Assert.That(byPrimitive.Polygons.Count, Is.EqualTo(expectedPolygons), $"{kind}：图元路径多边形数（实测钉）");
+            Assert.That(CsgMesh.TrianglesOf(byNode).Count, Is.EqualTo(expectedTriangles), $"{kind}：节点路径三角形数（实测钉）");
+            Assert.That(CsgMesh.TrianglesOf(byPrimitive).Count, Is.EqualTo(expectedTriangles), $"{kind}：图元路径三角形数（实测钉）");
+            Assert.That(GeometryAssert.SignedVolume(byNode), Is.EqualTo(expectedVolume).Within(VolumePinTolerance),
+                $"{kind}：节点路径体积（实测钉 {expectedVolume:R}）");
+            Assert.That(GeometryAssert.SignedVolume(byPrimitive), Is.EqualTo(expectedVolume).Within(VolumePinTolerance),
+                $"{kind}：图元路径体积（实测钉 {expectedVolume:R}）");
+
             // 实体事实（实测：Box 6/6、Cylinder 36/36 多边形；体积差 0；三角形 12/12 与 48/48）。
             Assert.That(byNode.Polygons.Count, Is.EqualTo(byPrimitive.Polygons.Count),
                 $"{kind}：多边形数 {byNode.Polygons.Count} vs {byPrimitive.Polygons.Count}");
@@ -59,10 +77,18 @@ namespace Csg.Test
                 $"{kind}：网格三角形数 {CsgMesh.TrianglesOf(byNode).Count} vs {CsgMesh.TrianglesOf(byPrimitive).Count}");
 
             // 投影事实（实测三视图端点最大偏差 0，段数如 Box 4,4,4；Cylinder 35,0,34）。
-            AssertSameViews(
-                ViewBridge.ProjectViews(byPrimitive, ViewDirections.OrthographicThree),
-                ViewBridge.ProjectViews(byNode, ViewDirections.OrthographicThree),
-                ExactTolerance, $"{kind} 节点路径 vs 图元路径");
+            var nodeViews = ViewBridge.ProjectViews(byNode, ViewDirections.OrthographicThree);
+            var primViews = ViewBridge.ProjectViews(byPrimitive, ViewDirections.OrthographicThree);
+
+            // 投影绝对读数钉（防两侧投影同为空使视图比较空转）：实测段数 4,4,4 / 35,0,34、弧数 0,0,0 / 0,1,0。
+            var expectedSegments = kind == "Box" ? new[] { 4, 4, 4 } : new[] { 35, 0, 34 };
+            var expectedArcs = kind == "Box" ? new[] { 0, 0, 0 } : new[] { 0, 1, 0 };
+            Assert.That(nodeViews.Select(v => v.Segments.Count).ToArray(), Is.EqualTo(expectedSegments),
+                $"{kind}：节点路径三视图段数（实测钉）");
+            Assert.That(nodeViews.Select(v => v.ArcCount).ToArray(), Is.EqualTo(expectedArcs),
+                $"{kind}：节点路径三视图弧数（实测钉）");
+
+            AssertSameViews(primViews, nodeViews, ExactTolerance, $"{kind} 节点路径 vs 图元路径");
         }
 
         /// <summary>
@@ -152,6 +178,13 @@ namespace Csg.Test
 
             var first = ViewBridge.ProjectViews(CsgEvaluator.Evaluate(tree), ViewDirections.OrthographicThree);
             var second = ViewBridge.ProjectViews(CsgEvaluator.Evaluate(tree), ViewDirections.OrthographicThree);
+
+            // 绝对读数钉（防两侧同空使比较空转）：实测三视图段数 18,8,33、弧数 0,1,0
+            // （同一树在探针实测 20 多边形 / 56 三角形 / 体积 1215.9999999999998，与 BooleanTransformTree 用例共用）。
+            Assert.That(first.Select(v => v.Segments.Count).ToArray(), Is.EqualTo(new[] { 18, 8, 33 }),
+                "两次求值的绝对段数钉（实测 18,8,33）");
+            Assert.That(first.Select(v => v.ArcCount).ToArray(), Is.EqualTo(new[] { 0, 1, 0 }),
+                "两次求值的绝对弧数钉（实测 0,1,0）");
 
             AssertSameViews(first, second, ExactTolerance, "两次求值 + 两次投影");
         }

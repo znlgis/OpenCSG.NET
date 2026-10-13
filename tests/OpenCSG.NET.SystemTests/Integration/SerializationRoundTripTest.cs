@@ -94,7 +94,8 @@ namespace Csg.Test
 
         /// <summary>
         /// 序列化往返后的实体投影不得有任何段/弧差异（实测端点差 0，含布尔与变换节点）。
-        /// 本条固定树实测：46 多边形、96 三角形、体积 2891.7128129211033、三视图段数 20,38,15 两侧一致。
+        /// 本条固定树实测：46 多边形、96 三角形、体积 2891.7128129211033、三视图段数 20,38,15 两侧一致；
+        /// 直接侧读数另以绝对钉固定（防两侧同空使比较空转）。
         /// </summary>
         [Test]
         public void RoundTrippedTree_ProjectsIdentically()
@@ -108,9 +109,16 @@ namespace Csg.Test
             var direct = CsgEvaluator.Evaluate(tree);
             var viaJson = CsgEvaluator.Evaluate(CsgSerialization.FromJson(CsgSerialization.ToJson(tree)));
 
+            // 绝对读数钉（实测钉，防 0==0 空转）：46 多边形、96 三角形、三视图段数 20,38,15。
+            Assert.That(direct.Polygons.Count, Is.EqualTo(46), "实测直接求值 46 个多边形");
+            Assert.That(CsgMesh.TrianglesOf(direct).Count, Is.EqualTo(96), "实测直接求值 96 个三角形");
+            var directViews = ViewBridge.ProjectViews(direct, ViewDirections.OrthographicThree);
+            var roundViews = ViewBridge.ProjectViews(viaJson, ViewDirections.OrthographicThree);
+            Assert.That(directViews.Select(v => v.Segments.Count).ToArray(), Is.EqualTo(new[] { 20, 38, 15 }),
+                "实测三视图段数 20,38,15（防比较空转）");
+
             PipelineIntegrationTest.AssertSameViews(
-                ViewBridge.ProjectViews(direct, ViewDirections.OrthographicThree),
-                ViewBridge.ProjectViews(viaJson, ViewDirections.OrthographicThree),
+                directViews, roundViews,
                 0.0, $"Subtract(Box, Transform(Cylinder)) 直接 vs JSON 往返（seed 等价树）");
         }
 
