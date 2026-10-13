@@ -2212,7 +2212,12 @@ static void Emit(string directory)
 **注意 `--emit` 里的 `Corpus.CorpusSpecs().IndexOf(spec)` 是 O(n²) 且对 record 值相等敏感**：改成带索引的 `for` 循环。把该处改为：
 
 ```csharp
+    // 表头 8 列 ⇒ 每行也必须 8 个字段。早期草稿表头写了 tier 而行里没输出它，
+    // 结果任何按键读列的使用方都会错位（连「最小体积」这类自检都会读到 meshTriangles 那一列）。
+    var csv = new StringBuilder("index,tier,kind,polygons,volume,meshTriangles,meshEuler,stl\n");
     var specs = Corpus.CorpusSpecs();
+    var normalCount = Corpus.CorpusCaseCount * 5 / 8;
+
     for (var index = 0; index < specs.Count; index++)
     {
         var spec = specs[index];
@@ -2220,11 +2225,13 @@ static void Emit(string directory)
         var name = $"{index:D4}-{spec.Kind}.stl";
         var path = Path.Combine(directory, name);
 
-        StlWriter.Write(path, CsgMesh.TrianglesOf(solid));
+        var triangles = CsgMesh.TrianglesOf(solid);   // 只构造一次（早期草稿建了两次）
+        StlWriter.Write(path, triangles);
 
-        var edges = MeshAssert.Analyze(CsgMesh.TrianglesOf(solid));
+        var edges = MeshAssert.Analyze(triangles);
+        var tier = index < normalCount ? "Normal" : "Survey";
         csv.Append(CultureInfo.InvariantCulture,
-            $"{index},{spec.Kind},{solid.Polygons.Count},"
+            $"{index},{tier},{spec.Kind},{solid.Polygons.Count},"
             + $"{GeometryAssert.SignedVolume(solid):R},{edges.TriangleCount},{edges.EulerCharacteristic},{name}\n");
     }
 ```
