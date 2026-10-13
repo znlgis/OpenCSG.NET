@@ -13,7 +13,7 @@ namespace Csg.Test
     /// 每个视图**单独**调用 oracle —— 防空洞守卫按调用判定（Task 2 修正轮的结论：聚合调用无法发现单个视图零判定）。
     /// </para>
     /// <para>
-    /// <b>豁免与归因（首轮实测 59/64 种子有视图失败；全部归因于 DEFECT-004 机制②）</b>：
+    /// <b>豁免与归因（首轮实测 59/64 种子有视图失败；全部归因于 DEFECT-005 栅格量化自遮挡误判，与 DEFECT-004 ② 同族）</b>：
     /// 失败明细的形状统一为「射线 9 探针全说可见（robust=[V]）而投影器把该段画成隐藏（proj=[H]）」，
     /// 即投影器在**消隐栅格的格量化**下把可见棱边切成 H 碎段。逐点反例（复刻 src 的 DepthRaster 后逐格复核）：
     /// <list type="bullet">
@@ -33,8 +33,8 @@ namespace Csg.Test
     /// 即 oracle 探的 3D 边与投影器画的边是同一条；余 38 条（2.8%，分布在 16 个种子上）的 H 段由
     /// <c>ViewSegmentCleanup</c> 的「只延长不缩短」合并/重叠折叠从相邻共线段延来（2D 重合抽象的有意成分，
     /// 该 H 与覆盖 q 的 V 重叠、制图上被实线盖住，见 <c>ViewSegmentCleanup</c> 类注释「不跨可见性合并」）。
-    /// 两者都是**消隐栅格 V/H 交替碎段**（DEFECT-004 机制②）的直接/下游产物，故全部引用 DEFECT-004 豁免，
-    /// 不新登记缺陷。逐种子失败视图与明细形态见 <see cref="OcclusionExemptSeeds"/> 上方注释。
+    /// 两者都是**消隐栅格量化**（DEFECT-005；与 DEFECT-004 ② 同族根因）的直接/下游产物，故全部按 DEFECT-005 豁免。
+    /// 逐种子失败视图与明细形态见 <see cref="OcclusionExemptSeeds"/> 上方注释。
     /// </para>
     /// <para>
     /// <b>为什么不动 oracle</b>：单点反例（种子 03，见上）证明 oracle 的判定与几何一致 ——
@@ -51,13 +51,14 @@ namespace Csg.Test
     public class Tier5OcclusionCorpusTest
     {
         /// <summary>
-        /// DEFECT-004 机制② 的语料豁免（brief 允许的唯一形式：按 index 豁免 + 注明编号与理由）。
+        /// DEFECT-005 的语料豁免（栅格量化自遮挡误判，与 DEFECT-004 ② 同族；brief 允许的唯一形式：按 index 豁免 + 注明编号与理由）。
         /// <para>
         /// 实测口径（首轮全绿运行前的失败扫描，逐 (seed, view) 一个进程以避免 NUnit 失败消息跨断言累积）：
         /// 失败视图用「主/俯/左」记录；「短碎段」= 覆盖采样点的隐藏输出段长度 ≤ 2 个栅格格（消隐碎段特征）；
         /// 「owner=相邻面」= 采样点所在格的最近深度由**该重合候选边自己的相邻面**提供（自遮挡量化，逐格复刻 DepthRaster 判定）；
         /// 「repro=H」= 复刻该候选边自己的 Split 会产出覆盖该采样点的 H 段（oracle 与投影器看的是同一条 3D 边）。
-        /// 全量 1358 条明细：repro=H 1320 / repro=V 38；owner=相邻面 877 / 其他 443；短碎段(≤2 格) 1227。
+        /// 全量 1358 条明细：repro=H 1320 / repro=V 38；owner=相邻面 877 / 其他 443；短碎段(≤2 格) 1160/1320
+        /// （全量 1186/1358；余 172 条为 >2 格 H 段/长虚线，最长 91.7 格）。
         /// </para>
         /// 逐种子（种子下标: 失败视图；短碎段数；owner=相邻面数；repro=H 数[；repro=V 数]）：
         /// </summary>
@@ -136,7 +137,7 @@ namespace Csg.Test
                 var data = new TestCaseData(seeds[i], Corpus.TierOf(i))
                     .SetName($"Corpus_{i:D2}_{Corpus.TierOf(i)}");
                 if (OcclusionExemptSeeds.Contains(i))
-                    data.Explicit("DEFECT-004: 消隐栅格逐格采样把可见棱边切成 1 格 H 碎段（机制②，见 tests/DEFECTS.md）");
+                    data.Explicit("DEFECT-005: 栅格量化自遮挡误判（cell·tanφ > bias）把可见边画成 H 碎段/长虚线（格量化，见 tests/DEFECTS.md；与 DEFECT-004 ② 同族）");
                 yield return data;
             }
         }
