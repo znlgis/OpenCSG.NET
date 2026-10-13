@@ -341,7 +341,7 @@ namespace Csg
 
 		BoundingBox Bounds {
 			get {
-				// 公共可变字段 Polygons 无法可靠失效缓存 ⇒ 每次现算（调用点仅 MayOverlap 与 BSP 树构造 2 处，O(n) 可忽略）。
+				// 公共可变字段 Polygons 无法可靠失效缓存 ⇒ 每次现算（调用点：MayOverlap 短路、BSP 树构造、CombinedBoundsAll（Union 入口）—— 每布尔运算 ~6–8 次 O(n) 扫描，相对 BSP 裁剪可忽略）。
 				var minpoint = new Vector3D (0, 0, 0);
 				var maxpoint = new Vector3D (0, 0, 0);
 				var polygons = this.Polygons;
