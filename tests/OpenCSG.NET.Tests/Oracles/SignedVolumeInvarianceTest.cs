@@ -39,7 +39,9 @@ namespace Csg.Test
         [Test]
         public void SignedVolume_SurveyTierPrimitives_AreAllPositive()
         {
-            for (var i = 0; i < 32; i++)
+            // 512 个样本：Task 3 实测修复前有 12/3072 ≈ 0.39% 的 Survey 实体读到负体积，
+            // 32 个样本不足以钉住修复（约 88% 概率碰巧全正）。512 个样本把误报概率压到 ~13%。
+            for (var i = 0; i < 512; i++)
             {
                 var spec = SolidGen.Random(i * 977 + 13, CoordTier.Survey);
                 var solid = SolidGen.Materialize(spec);
