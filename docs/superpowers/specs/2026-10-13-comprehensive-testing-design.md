@@ -306,6 +306,8 @@ sample 是顶层语句 console app，几何代码无法被测试项目引用。L
 
 ### Plan B（生成器 + 属性/模糊）
 
+> **已拆为两个计划**（2026-10-13）：**B1** = 阶段 2 的生成器/Corpus/DataGen + Tier 1–3 属性测试（`docs/superpowers/plans/2026-10-13-comprehensive-testing-plan-b1.md`）；**B2** = Tier 5 遮挡 oracle（下列第一条，独立成计划）。拆分理由：Tier 5 需要独立的 `RayCast` 独立实现与遮挡属性测试，可完全叠加在 B1 之上，且它是 HLR 子系统唯一的遮挡真值来源，值得单独的计划与审查注意力。
+
 - **遮挡 oracle 是必做项**：Plan A 没有任何测试产生 `HiddenCount > 0`，`DepthRaster.Split` 的可见/隐藏拆分、`ViewSegmentCleanup` 的合并/丢弃分支、`ViewArcFitter` 的接受路径从未非平凡执行；也没有任何测试断言单条线段的端点，因此「包围盒正确但内部几何错误」的投影仍会通过。Tier-5 射线投射 oracle 是唯一能关闭它的手段。
 - TestKit 目录布局按 §4 落位（`Generation/`、`Oracles/`、`Bridge/`、`Io/`）；Plan A 落的是扁平文件，加生成器前先定下来。
 - `GoldenPaths` 的标记文件名要参数化（当前硬编码 `OpenCSG.NET.Tests.csproj`，`tests/OpenCSG.NET.TestKit/GoldenPaths.cs:11`），否则 SystemTests 无法复用。
