@@ -20,7 +20,8 @@ namespace Csg.Test
     public static class GeometryAssert
     {
         /// <summary>顶点在同一位置合并的容差：远大于接缝处 1e-16 浮点噪声、远小于 CSG 的 1e-5 容差。</summary>
-        public const double MergeTolerance = 1e-6;
+        /// <remarks>聚簇实现共享于 <see cref="VertexCluster"/>：两侧口径必须一致，结论才可交叉比对。</remarks>
+        public const double MergeTolerance = VertexCluster.Tolerance;
 
         public sealed class ManifoldReport
         {
@@ -73,7 +74,7 @@ namespace Csg.Test
                     positions.Add(vertex.Pos);
             }
 
-            var clusterOf = Cluster(positions);
+            var clusterOf = VertexCluster.Cluster(positions, p => (p.X, p.Y, p.Z));
             var clusterCenters = new List<Vector3D>();
             var centerByCluster = new Dictionary<int, Vector3D>();
             for (int i = 0; i < positions.Count; i++)
@@ -104,12 +105,12 @@ namespace Csg.Test
                         report.ZeroLengthEdges++;
                         continue;
                     }
-                    long key = a < b ? Pair(a, b) : Pair(b, a);
+                    long key = a < b ? VertexCluster.Pack(a, b) : VertexCluster.Pack(b, a);
                     undirected.TryGetValue(key, out var uc);
                     undirected[key] = uc + 1;
                     if (!undirectedEnds.ContainsKey(key))
                         undirectedEnds[key] = (v[i].Pos, v[next].Pos);
-                    long dkey = Pair(a, b);
+                    long dkey = VertexCluster.Pack(a, b);
                     directed.TryGetValue(dkey, out var dc);
                     directed[dkey] = dc + 1;
                 }
@@ -300,54 +301,6 @@ namespace Csg.Test
             }
             return false;
         }
-
-        /// <summary>把位置按容差聚簇（网格哈希 + 邻域查找，避免排序单链聚簇的漏合并）。</summary>
-        static int[] Cluster(List<Vector3D> points)
-        {
-            var cell = MergeTolerance;
-            var buckets = new Dictionary<(long, long, long), List<int>>();
-            var centers = new List<Vector3D>();
-            var result = new int[points.Count];
-
-            for (int i = 0; i < points.Count; i++)
-            {
-                var p = points[i];
-                long cx = (long)Math.Floor(p.X / cell), cy = (long)Math.Floor(p.Y / cell), cz = (long)Math.Floor(p.Z / cell);
-                int found = -1;
-                for (long dx = -1; dx <= 1 && found < 0; dx++)
-                for (long dy = -1; dy <= 1 && found < 0; dy++)
-                for (long dz = -1; dz <= 1 && found < 0; dz++)
-                {
-                    if (!buckets.TryGetValue((cx + dx, cy + dy, cz + dz), out var list))
-                        continue;
-                    foreach (var candidate in list)
-                    {
-                        var c = centers[candidate];
-                        if (Math.Abs(c.X - p.X) <= cell && Math.Abs(c.Y - p.Y) <= cell && Math.Abs(c.Z - p.Z) <= cell)
-                        {
-                            found = candidate;
-                            break;
-                        }
-                    }
-                }
-                if (found < 0)
-                {
-                    centers.Add(p);
-                    found = centers.Count - 1;
-                }
-                result[i] = found;
-                var key = (cx, cy, cz);
-                if (!buckets.TryGetValue(key, out var bucket))
-                {
-                    bucket = new List<int>(2);
-                    buckets[key] = bucket;
-                }
-                bucket.Add(found);
-            }
-            return result;
-        }
-
-        static long Pair(int a, int b) => ((long)a << 32) | (uint)b;
 
         static double MaxAbsCoordinate(Solid solid)
         {

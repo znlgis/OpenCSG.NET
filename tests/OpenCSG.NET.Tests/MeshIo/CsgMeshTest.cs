@@ -87,5 +87,34 @@ namespace Csg.Test
 
             Assert.That(MeshAssert.TotalArea(triangles), Is.EqualTo(solidArea).Within(1e-9));
         }
+
+        [Test]
+        public void Cube100_FromCsg_HasExpectedTopology()
+        {
+            var cube = Solids.Cube(100, center: true);
+            var triangles = CsgMesh.TrianglesOf(cube);
+
+            var report = MeshAssert.Analyze(triangles);
+
+            // 立方体扇形剖分：8 个焊接顶点、18 条焊接边（12 条棱 + 6 条面对角线）、12 个三角面
+            Assert.That(report.VertexCount, Is.EqualTo(8), $"| {report}");
+            Assert.That(report.EdgeCount, Is.EqualTo(18), $"| {report}");
+            Assert.That(report.TriangleCount, Is.EqualTo(12), $"| {report}");
+            Assert.That(report.EulerCharacteristic, Is.EqualTo(2), $"| {report}");
+        }
+
+        [Test]
+        public void Cube100_MeshVolume_MatchesSolidSideVolume()
+        {
+            var cube = Solids.Cube(100, center: true);
+            var triangles = CsgMesh.TrianglesOf(cube);
+
+            var solidVolume = GeometryAssert.SignedVolume(cube);
+
+            // 分别断言两侧符号，才能排除「CSG 侧绕序朝内 + CsgMesh 未翻绕序」互相抵消的情形：
+            // 那种配错下两个体积都"看着自洽"，但 Solid 侧会是负值。
+            Assert.That(solidVolume, Is.GreaterThan(0), "CSG 侧立方体绕序朝内 ⇒ 与 CsgMesh 的配对反转会互相掩盖");
+            Assert.That(MeshAssert.SignedVolume(triangles), Is.EqualTo(solidVolume).Within(1e-6));
+        }
     }
 }

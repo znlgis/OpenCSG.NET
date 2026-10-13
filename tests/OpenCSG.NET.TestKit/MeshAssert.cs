@@ -13,7 +13,8 @@ namespace Csg.Test
     /// </summary>
     public static class MeshAssert
     {
-        public const double MergeTolerance = 1e-6;
+        /// <summary>顶点合并容差；聚簇实现共享于 <see cref="VertexCluster"/>（与 <see cref="GeometryAssert.MergeTolerance"/> 同值同语义）。</summary>
+        public const double MergeTolerance = VertexCluster.Tolerance;
 
         /// <summary>欧拉特征与边统计。</summary>
         public readonly struct EdgeReport
@@ -114,7 +115,7 @@ namespace Csg.Test
                 points.Add(triangles[i].C);
             }
 
-            var cluster = Cluster(points);
+            var cluster = VertexCluster.Cluster(points, p => (p.X, p.Y, p.Z));
             int vertexCount = 0;
             foreach (var c in cluster)
                 if (c + 1 > vertexCount)
@@ -132,10 +133,10 @@ namespace Csg.Test
                     int b = cluster[b0 + (k + 1) % 3];
                     if (a == b)
                         continue;
-                    long ukey = a < b ? Pack(a, b) : Pack(b, a);
+                    long ukey = a < b ? VertexCluster.Pack(a, b) : VertexCluster.Pack(b, a);
                     undirected.TryGetValue(ukey, out var uc);
                     undirected[ukey] = uc + 1;
-                    long dkey = Pack(a, b);
+                    long dkey = VertexCluster.Pack(a, b);
                     directed.TryGetValue(dkey, out var dc);
                     directed[dkey] = dc + 1;
                 }
@@ -167,6 +168,8 @@ namespace Csg.Test
             var report = Analyze(triangles);
             var prefix = message ?? "mesh";
 
+            Assert.That(report.TriangleCount, Is.GreaterThan(0),
+                $"{prefix}: 三角形数为 0 —— 空网格不是合法实体（本断言对空输入会真空通过）| {report}");
             Assert.That(report.BoundaryEdges, Is.EqualTo(0),
                 $"{prefix}: 有 {report.BoundaryEdges} 条边界边（网格不封闭）| {report}");
             Assert.That(report.NonManifoldEdges, Is.EqualTo(0),
@@ -174,53 +177,5 @@ namespace Csg.Test
             Assert.That(report.DuplicatedEdges, Is.EqualTo(0),
                 $"{prefix}: 有 {report.DuplicatedEdges} 条有向边重复（绕序不一致）| {report}");
         }
-
-        /// <summary>网格哈希 + 27 邻域精确比较的容差聚簇（与 GeometryAssert.Cluster 同口径）。</summary>
-        static int[] Cluster(List<MeshPoint> points)
-        {
-            var cell = MergeTolerance;
-            var buckets = new Dictionary<(long, long, long), List<int>>();
-            var centers = new List<MeshPoint>();
-            var result = new int[points.Count];
-
-            for (int i = 0; i < points.Count; i++)
-            {
-                var p = points[i];
-                long cx = (long)Math.Floor(p.X / cell), cy = (long)Math.Floor(p.Y / cell), cz = (long)Math.Floor(p.Z / cell);
-                int found = -1;
-                for (long dx = -1; dx <= 1 && found < 0; dx++)
-                for (long dy = -1; dy <= 1 && found < 0; dy++)
-                for (long dz = -1; dz <= 1 && found < 0; dz++)
-                {
-                    if (!buckets.TryGetValue((cx + dx, cy + dy, cz + dz), out var list))
-                        continue;
-                    foreach (var candidate in list)
-                    {
-                        var c = centers[candidate];
-                        if (Math.Abs(c.X - p.X) <= cell && Math.Abs(c.Y - p.Y) <= cell && Math.Abs(c.Z - p.Z) <= cell)
-                        {
-                            found = candidate;
-                            break;
-                        }
-                    }
-                }
-                if (found < 0)
-                {
-                    centers.Add(p);
-                    found = centers.Count - 1;
-                }
-                result[i] = found;
-                var key = (cx, cy, cz);
-                if (!buckets.TryGetValue(key, out var bucket))
-                {
-                    bucket = new List<int>(2);
-                    buckets[key] = bucket;
-                }
-                bucket.Add(found);
-            }
-            return result;
-        }
-
-        static long Pack(int a, int b) => ((long)a << 32) | (uint)b;
     }
 }
