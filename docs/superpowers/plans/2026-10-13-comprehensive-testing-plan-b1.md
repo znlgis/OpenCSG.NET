@@ -2723,6 +2723,13 @@ git commit -m "test: Tier 1 布尔恒等式属性测试（577 用例）"
 
 ### Task 8: Tier 1（续）—— 变换等价 / 包围盒 / 序列化往返 / 相等契约 / 平面分割
 
+> **先读：Task 7 已登记 DEFECT-003（Survey 档 `Solid.Union` 返回损坏的 B-rep）。** 本任务有两族 oracle 会在 Survey 档撞上它：
+> - `AssertBoundingBoxAlgebra` 里的 `bbox(A∪B)` 与 `bbox(A∩B)` 两行 —— `A∪B` 在 1e6 处不可信；
+> - `AssertTransformEquivariance` 只做**单实体**变换（scale/rotate/mirror/translate），**不涉及布尔**，所以它不受 DEFECT-003 影响；但它的 `Translate` 分支会把实体搬到远处并断言体积不变 —— 体积读数本身在 Task 3B 修好后是可信的（单实体平衡木、无布尔），所以该族应当全过。
+>
+> **处置方式沿用 Task 7 已接受的机制**：受 DEFECT-003 影响的 seed 用 `TestCaseData.Explicit(...)` 从共享工厂里**逐 case 排除**（不要用 `yield break`，也不要改变期望值），并在 `tests/DEFECTS.md` 的 DEFECT-003 行补上本任务新发现的失败 seed。**若某条断言在 Normal 档就失败，那与 DEFECT-003 无关，按新缺陷处置**（读 `tests/DEFECTS.md` 取下一个空闲编号）。
+
+
 spec §6 的 Tier 1 清单里还有五族恒等式没有被 Task 7 覆盖：包围盒代数、变换等价、镜像对合、序列化往返、平面分割，以及 `Vector3D`/`Vector2D` 的相等契约。它们同样对任意输入成立，且各自钉住一条独立路径。
 
 **Files:**
