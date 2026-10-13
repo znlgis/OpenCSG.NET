@@ -56,6 +56,10 @@ namespace Csg.Test
             var b = SolidGen.Materialize(specB);
 
             IdentityAssert.AssertInclusionExclusion(a, b, Tol, Describe(seed, tier));
+            // 面积版无参考点（不受 T 顶点接缝漂移影响），补在体积版之后：
+            // 体积版靠自校准漂移预算放宽容差，修正轮 1 里 7 个 DEFECT-003 种子被吞掉；
+            // 面积口径独立接住其中 6 个（第 7 个 seed 53 两个口径都接不住，见 tests/DEFECTS.md）。
+            IdentityAssert.AssertAreaInclusionExclusion(a, b, Tol, Describe(seed, tier));
         }
 
         [TestCaseSource(nameof(SmokeCases))]
@@ -97,8 +101,10 @@ namespace Csg.Test
             var a = SolidGen.Materialize(specA);
             var b = SolidGen.Materialize(specB);
 
-            IdentityAssert.AssertInclusionExclusion(a, b, Tol,
-                $"FsCheck 反例：sizeSeed={sizeSeed} offsetSeed={offsetSeed} rotationSeed={rotationSeed} kindSeed={kindSeed}");
+            var message = $"FsCheck 反例：sizeSeed={sizeSeed} offsetSeed={offsetSeed} rotationSeed={rotationSeed} kindSeed={kindSeed}";
+            IdentityAssert.AssertInclusionExclusion(a, b, Tol, message);
+            // 面积版：无参考点、对接缝免疫，正是为了压掉体积口径的参考点漂移误报而加。
+            IdentityAssert.AssertAreaInclusionExclusion(a, b, Tol, message);
         }
 
         /// <summary>把几个整数确定性地映射成一个 spec（`variant` 区分 A/B 两侧）。</summary>

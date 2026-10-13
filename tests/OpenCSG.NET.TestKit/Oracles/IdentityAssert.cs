@@ -57,6 +57,42 @@ namespace Csg.Test
                 + $"T 顶点接缝不会产生重复有向边，故这条断言不受接缝干扰 | {intersectionReport}");
         }
 
+        /// <summary>
+        /// 面积版的包含排斥恒等式：area(A∪B) = area(A) + area(B) − area(A∩B)。
+        /// <para>
+        /// **为什么需要它**：体积用散度定理算，必须选一个积分参考点；而库的布尔输出可能带 T 顶点接缝
+        /// （README 已记录），此时体积读数会随参考点缓慢漂移，只能靠「漂移预算」放宽容差 ——
+        /// 而那个预算本身是根据（可能已损坏的）输出自校准出来的，等于给损坏开后门。
+        /// 面积**不需要参考点**：它是 |边×边|/2 的求和，平移不变，也不受三角剖分方式影响；
+        /// T 顶点接缝只是把面重新剖分，覆盖的总面积不变。库自己文档化的不变量正是面积口径
+        /// （「表面没有面积缺失」），所以这才是该口径的正确 oracle。
+        /// </para>
+        /// </summary>
+        public static void AssertAreaInclusionExclusion(Solid a, Solid b, double tolerance, string? message = null)
+        {
+            // 与体积版同型的四个布尔项，但一律用「三角形面积之和」度量（MeshAssert.TotalArea，
+            // 输入走 CsgMesh.TrianglesOf —— 与体积口径同样的真实转换链，只是不再需要参考点）。
+            var unionSolid = a.Union(b);
+            var interSolid = a.Intersect(b);
+
+            var areaA = MeshAssert.TotalArea(CsgMesh.TrianglesOf(a));
+            var areaB = MeshAssert.TotalArea(CsgMesh.TrianglesOf(b));
+            var union = MeshAssert.TotalArea(CsgMesh.TrianglesOf(unionSolid));
+            var intersection = MeshAssert.TotalArea(CsgMesh.TrianglesOf(interSolid));
+
+            var expected = areaA + areaB - intersection;
+            var residual = union - expected;
+            var scale = Scale(areaA, areaB, union, intersection);
+            var slack = System.Math.Max(tolerance, RelativeTolerance * scale);
+
+            Assert.That(union, Is.EqualTo(expected).Within(slack),
+                $"{Prefix(message)} 面积包含排斥不成立：area(A∪B)={union:R} 应为 area(A)+area(B)−area(A∩B)={expected:R}"
+                + $"（area(A)={areaA:R} area(B)={areaB:R} area(A∩B)={intersection:R}；残差={residual:R}，"
+                + $"相对残差={residual / scale:R}）"
+                + $" | A∪B 网格: {GeometryAssert.Analyze(unionSolid)}"
+                + $" | A∩B 网格: {GeometryAssert.Analyze(interSolid)}");
+        }
+
         /// <summary>A − B = A − A ∩ B。</summary>
         public static void AssertDifferenceIdentity(Solid a, Solid b, double tolerance, string? message = null)
         {
