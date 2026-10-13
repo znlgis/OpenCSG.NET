@@ -427,3 +427,6 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# 测试产物（覆盖率报告、物化数据集、基准输出）
+artifacts/
