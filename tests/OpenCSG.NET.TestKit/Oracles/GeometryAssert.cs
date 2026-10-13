@@ -42,18 +42,30 @@ namespace Csg.Test
                  + $"T-junctions={TJunctions} seamEdges={SeamEdges}";
         }
 
-        /// <summary>散度定理净体积 V = Σ v0·(v1×v2)/6（多边形按首顶点扇形剖分）。</summary>
+        /// <summary>
+        /// 散度定理净体积 V = Σ v0·(v1×v2)/6（多边形按首顶点扇形剖分）。
+        /// **参考点取包围盒中心**，而不是全局原点：对闭合曲面该值与参考点无关，
+        /// 但用原点做参考时，离原点很远的实体（测绘坐标 ±1e6）每项量级 ~1e18、
+        /// 真实体积仅 ~1e1，双精度在 1e18 处的 ULP≈128 会直接把体积吞掉
+        /// （实测：r=1 球平移 1e6 后读到 780.4，平移 (1e6,−2e6,3e6) 后读到 −6089.98）。
+        /// </summary>
         public static double SignedVolume(Solid solid)
         {
+            if (solid.Polygons.Count == 0)
+                return 0.0;
+
+            var (boundMin, boundMax) = Bounds(solid);
+            var reference = (boundMin + boundMax) * 0.5;
+
             double volume = 0;
             foreach (var polygon in solid.Polygons)
             {
                 var v = polygon.Vertices;
                 if (v.Count < 3)
                     continue;
-                var v0 = v[0].Pos;
+                var v0 = v[0].Pos - reference;
                 for (int i = 1; i < v.Count - 1; i++)
-                    volume += Dot(v0, Cross(v[i].Pos, v[i + 1].Pos));
+                    volume += Dot(v0, Cross(v[i].Pos - reference, v[i + 1].Pos - reference));
             }
             return volume / 6.0;
         }

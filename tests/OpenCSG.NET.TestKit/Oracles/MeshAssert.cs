@@ -46,18 +46,35 @@ namespace Csg.Test
                  + $"duplicated={DuplicatedEdges} chi={EulerCharacteristic}";
         }
 
-        /// <summary>散度定理有向体积（右手绕序 ⇒ 法线朝外 ⇒ 正值）。</summary>
+        /// <summary>
+        /// 散度定理有向体积（右手绕序 ⇒ 法线朝外 ⇒ 正值）。
+        /// 参考点取包围盒中心 —— 理由与 <see cref="GeometryAssert.SignedVolume"/> 相同：
+        /// 全局原点在测绘坐标下会因抵消误差失去全部精度。
+        /// </summary>
         public static double SignedVolume(IReadOnlyList<MeshTriangle> triangles)
         {
+            if (triangles.Count == 0)
+                return 0.0;
+
+            var (boundMin, boundMax) = Bounds(triangles);
+            var rx = (boundMin.X + boundMax.X) * 0.5;
+            var ry = (boundMin.Y + boundMax.Y) * 0.5;
+            var rz = (boundMin.Z + boundMax.Z) * 0.5;
+
             double volume = 0;
             for (int i = 0; i < triangles.Count; i++)
             {
                 var a = triangles[i].A;
                 var b = triangles[i].B;
                 var c = triangles[i].C;
-                volume += a.X * (b.Y * c.Z - b.Z * c.Y)
-                        - a.Y * (b.X * c.Z - b.Z * c.X)
-                        + a.Z * (b.X * c.Y - b.Y * c.X);
+
+                var ax = a.X - rx; var ay = a.Y - ry; var az = a.Z - rz;
+                var bx = b.X - rx; var by = b.Y - ry; var bz = b.Z - rz;
+                var cx = c.X - rx; var cy = c.Y - ry; var cz = c.Z - rz;
+
+                volume += ax * (by * cz - bz * cy)
+                        - ay * (bx * cz - bz * cx)
+                        + az * (bx * cy - by * cx);
             }
             return volume / 6.0;
         }
