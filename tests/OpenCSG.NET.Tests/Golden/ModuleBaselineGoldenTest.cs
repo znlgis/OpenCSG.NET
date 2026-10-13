@@ -13,11 +13,13 @@ namespace Csg.Test
     /// FilletConcave / RoundConvexCorner）、A2 修复后的扇形柱（CylinderOptions.SectorAngle）、
     /// 定向图元（CubeOptions / SphereOptions 非默认参数）与弦高容差细分（TessellationScope）。
     ///
-    /// golden 约定与既有 45 个基线一致（SolidTest.AssertAcceptedStl 因文件冻结不可改，
-    /// 按同约定最小复制为下方私有辅助）：文件名 &lt;Fixture&gt;.&lt;TestName&gt;.stl；
+    /// golden 约定对齐既有 45 个基线（SolidTest.AssertAcceptedStl 因文件冻结不可改，按简报
+    /// 最小复制为下方私有辅助）：文件名 &lt;Fixture&gt;.&lt;TestName&gt;.stl；
     /// 内容 = Solid.ToStlString("&lt;TestName&gt;")（ASCII / UTF-8 无 BOM）；基线缺失 ⇒ 写
     /// &lt;Fixture&gt;.&lt;TestName&gt;_.stl 并 Assert.Inconclusive（GoldenGuard 随即转红）；
-    /// 基线存在 ⇒ 与 ToStlString 输出逐字节比对，不一致即失败。
+    /// 基线存在 ⇒ 与 ToStlString 输出**逐字节**比对，不一致即失败。
+    /// 与 legacy 的口径差异为**有意设计**（简报指定的 byte-exact variant）：本套件逐字节比对；
+    /// legacy SolidTest 在 header 序数相等、三角形数相等之后，面积/体积/包围盒按 1e-10 数值容差比较。
     /// 每个用例的几何参数写成可读常量；新增基线须经 tools/promote-goldens.sh 人工确认后升级。
     /// </summary>
     [TestFixture]
@@ -109,7 +111,8 @@ namespace Csg.Test
             // 斜边角第二基线：采用图纸实测件参数（宽 375 / 孔心高 340 / R125 ⇒ 名义 ≈70.90°），
             // 先用 TabbedPlateSlantAngleDeg 钉住角度语义，再钉整件 STL。
             // 注：简报原拟 θ≈10° 浅斜边参数域，实测该域肩部矩形只覆盖 [zLeft, zLeft+R·sinθ]，
-            // θ<30° 时覆盖不足到「圆头顶与盒顶相接处」⇒ 圆头外侧残留平台 + 竖壁台阶（task-2 报告记录），
+            // θ<30° 时覆盖不足到「圆头顶与盒顶相接处」⇒ 圆头外侧残留平台 + 竖壁台阶
+            // （已登记 DEFECT-008，复现测试 D8TabbedPlateShallowSlantTest），
             // 故基线落在构造干净（θ>30°）的参数域。
             const double xCenter = 0, thickness = 20, zLeft = 50, width = 375;
             const double yBottom = 0, yCenter = 340, headRadius = 125, holeRadius = 40;
@@ -258,8 +261,11 @@ namespace Csg.Test
         // ─────────────── golden 私有辅助（SolidTest.AssertAcceptedStl 的最小复刻） ───────────────
 
         /// <summary>
-        /// 与既有 45 个基线一致的断言：文件名 <c>&lt;fixture&gt;.&lt;TestName&gt;.stl</c>；
+        /// 对齐既有 45 个基线的断言（byte-exact 变体，与 legacy 的口径差异见类注释）：
+        /// 文件名 <c>&lt;fixture&gt;.&lt;TestName&gt;.stl</c>；
         /// 内容 = <c>Solid.ToStlString(TestName)</c> 的 UTF-8 无 BOM 字节。
+        /// 进入即删除陈旧 pending 残留（与 legacy SolidTest 的 <c>File.Delete(rejectedPath)</c> 同行为，
+        /// 避免中断运行留下的 <c>*_.stl</c> 在基线已恢复后让 GoldenGuard 永久转红）；
         /// 基线缺失 ⇒ 写 <c>&lt;fixture&gt;.&lt;TestName&gt;_.stl</c> 残留 + Inconclusive
         /// （由 GoldenGuard 门禁在整套件收尾时判红）；
         /// 基线存在 ⇒ File.ReadAllBytes 逐字节比对，不一致即失败。
@@ -273,9 +279,16 @@ namespace Csg.Test
                 .GetBytes(solid.ToStlString(testName));
 
             var acceptedPath = Path.Combine(results!, $"{fixture}.{testName}.stl");
+            var pendingPath = Path.Combine(results!, $"{fixture}.{testName}_.stl");
+
+            // 同 legacy SolidTest.AssertAcceptedStl：先清掉上次中断运行留下的 pending 残留——
+            // 否则基线（升级/修复）恢复后，陈旧 *_.stl 会让 GoldenGuard 永久转红。
+            if (File.Exists(pendingPath))
+                File.Delete(pendingPath);
+
             if (!File.Exists(acceptedPath))
             {
-                File.WriteAllBytes(Path.Combine(results!, $"{fixture}.{testName}_.stl"), bytes);
+                File.WriteAllBytes(pendingPath, bytes);
                 Assert.Inconclusive(
                     $"golden 基线缺失：已写 {fixture}.{testName}_.stl；核对后用 tools/promote-goldens.sh 升级。");
             }
