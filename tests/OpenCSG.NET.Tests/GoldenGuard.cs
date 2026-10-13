@@ -12,6 +12,9 @@ namespace Csg.Test
     /// Inconclusive 不会让 dotnet test 失败，于是"新增用例忘了升级 golden"会静默通过、零保护。
     /// 本 SetUpFixture 在整套件结束时扫描 Results/，任何 *_ .stl 残留都判失败。
     /// 必须放在测试程序集内：NUnit 不扫描被引用程序集里的 [SetUpFixture]。
+    /// 已知局限：OneTimeTearDown 失败属 fixture 级错误，不计入 VSTest 用例失败数；
+    /// 实测 --filter 排除 GoldenGuardTest 时，即使门禁触发，运行仍报通过、退出码为 0
+    /// （全量运行时 GoldenGuardTest 也会失败，故整套件运行仍为非零退出）。
     /// </summary>
     [SetUpFixture]
     public class GoldenGuard
@@ -36,6 +39,14 @@ namespace Csg.Test
         public void FailOnUnacceptedGoldens()
         {
             var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location);
+
+            if (string.IsNullOrEmpty(results) || !Directory.Exists(results))
+            {
+                Assert.Fail(
+                    "golden 门禁无法定位 Results 目录（GoldenPaths 返回 null，或目录不存在）——"
+                    + "此时门禁形同虚设，故判失败而不是静默通过。");
+            }
+
             var pending = FindPendingGoldens(results);
 
             if (pending.Count == 0)
@@ -48,6 +59,8 @@ namespace Csg.Test
             Assert.Fail(
                 $"有 {pending.Count} 个 golden 结果未升级：\n  {string.Join("\n  ", names)}\n"
                 + "含义：新增用例从未被断言（零保护），或既有用例输出已变。\n"
+                + "排查提示：若被标记的名字看起来像一条正式基线（即 {Fixture}.{Test}_.stl 中的 {Test} 本身以 _ 结尾），\n"
+                + "那是测试方法名以 _ 结尾造成的歧义 —— 本门禁按后缀匹配无法区分，请给该用例改名，不要反复 promote。\n"
                 + $"确认输出正确后运行 tools/promote-goldens.sh 升级；目录：{results}");
         }
     }
