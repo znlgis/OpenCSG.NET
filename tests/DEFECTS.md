@@ -25,6 +25,6 @@
 
 ## 已修复
 
-| ID | 模块 | 修复方式 | 回归用例 |
-| --- | --- | --- | --- |
-| （暂无） | | | |
+| ID | 模块 | 严重度 | 现象 | 最小复现 | 期望 vs 实际 | 影响面 | 处置 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| A1 | `Solid`（`src/OpenCSG.NET/Solid.cs`） | 严重 | `Polygons` 为公共可变 `List<Polygon>`；`cachedBoundingBox` 惰性缓存且无失效机制；`FromPolygons` 别名持有调用方 list。缓存过期后 `Union` 的 `MayOverlap` 用陈旧包络误判「不相交」而跳过 BSP 裁剪 —— 原地换掉多边形时 count 不变，缓存无从察觉 | 一行命令：`dotnet test tests/OpenCSG.NET.Tests -c Release --filter "FullyQualifiedName~A1SolidCacheTest"`（回归用例即最小复现：先 `a.Intersect(probe)` 触发缓存，再原地换 `a.Polygons` 为与 c 半重叠的盒后 `a.Union(c)`） | 期望：`Union` 读现算包络得 1500、`FromPolygons` 不持有调用方 list；实际（修复前）：并集走拼接路径读 2000（两个半重叠壳），清空调用方 list 后实体归零 | 任何在缓存建立后原地修改 `Polygons`（公共字段允许，无法拦截）的调用都会让 `Union` 静默跳过裁剪、产出重叠重复几何；空 `Polygons` 仍返回零包络（与旧行为一致） | 已修复（Plan C 最小修复：删 `cachedBoundingBox` 每次现算 + `FromPolygons` 防御性复制；回归 `A1SolidCacheTest`；2026-10-14；出自 spec §8 缺陷勘察表，从未分配 DEFECT 编号） |

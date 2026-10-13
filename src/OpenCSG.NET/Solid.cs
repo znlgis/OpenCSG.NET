@@ -16,8 +16,6 @@ namespace Csg
 		public const int DefaultResolution2D = 32;
 		public const int DefaultResolution3D = 12;
 
-		BoundingBox? cachedBoundingBox;
-
 		public Solid ()
 		{
 			Polygons = new List<Polygon> ();
@@ -28,7 +26,7 @@ namespace Csg
 		public static Solid FromPolygons (List<Polygon> polygons)
 		{
 			var csg = new Solid ();
-			csg.Polygons = polygons;
+			csg.Polygons = new List<Polygon> (polygons); // 防御性复制：避免别名持有调用方列表
 			csg.IsCanonicalized = false;
 			csg.IsRetesselated = false;
 			return csg;
@@ -343,26 +341,24 @@ namespace Csg
 
 		BoundingBox Bounds {
 			get {
-				if (cachedBoundingBox == null) {
-					var minpoint = new Vector3D (0, 0, 0);
-					var maxpoint = new Vector3D (0, 0, 0);
-					var polygons = this.Polygons;
-					var numpolygons = polygons.Count;
-					for (var i = 0; i < numpolygons; i++) {
-						var polygon = polygons[i];
-						var bounds = polygon.BoundingBox;
-						if (i == 0) {
-							minpoint = bounds.Min;
-							maxpoint = bounds.Max;
-						}
-						else {
-							minpoint = minpoint.Min (bounds.Min);
-							maxpoint = maxpoint.Max (bounds.Max);
-						}
+				// 公共可变字段 Polygons 无法可靠失效缓存 ⇒ 每次现算（调用点仅 MayOverlap 与 BSP 树构造 2 处，O(n) 可忽略）。
+				var minpoint = new Vector3D (0, 0, 0);
+				var maxpoint = new Vector3D (0, 0, 0);
+				var polygons = this.Polygons;
+				var numpolygons = polygons.Count;
+				for (var i = 0; i < numpolygons; i++) {
+					var polygon = polygons[i];
+					var bounds = polygon.BoundingBox;
+					if (i == 0) {
+						minpoint = bounds.Min;
+						maxpoint = bounds.Max;
 					}
-					cachedBoundingBox = new BoundingBox (minpoint, maxpoint);
+					else {
+						minpoint = minpoint.Min (bounds.Min);
+						maxpoint = maxpoint.Max (bounds.Max);
+					}
 				}
-				return cachedBoundingBox;
+				return new BoundingBox (minpoint, maxpoint);
 			}
 		}
 
