@@ -5,7 +5,8 @@ Spec：`docs/superpowers/specs/2026-10-13-comprehensive-testing-design.md`
 
 ## 阶段 0 — 基线（改动前）
 
-测量环境：Windows 10.0.26300 / .NET SDK 8.0.425 / `-c Release`
+测量环境：Windows 10.0.26300 / .NET SDK 10.0.401 / `-c Release`
+说明：仓库无 `global.json`，SDK 未固定，`dotnet` 浮动至本机最新安装版本；本报告测量数据均由上述 SDK 产出，SDK 固定已登记为 Plan F（CI）事项。
 
 ### 用例
 
