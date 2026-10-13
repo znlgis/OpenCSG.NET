@@ -134,7 +134,10 @@ namespace Csg
 			var rEnd = Math.Abs (options.RadiusEnd);
 			var rStart = r;
 			var alpha = options.SectorAngle;
-			alpha = alpha > 360 ? alpha % 360 : alpha;
+			if (alpha != 0) {
+				alpha -= 360 * Math.Floor (alpha / 360);   // 非零角归一到 [0, 360)
+				if (alpha == 0) alpha = 360;               // 整圈（720/-360）⇒ 完整圆柱
+			}
 
 			if ((rEnd == 0) && (rStart == 0)) {
 				return new Solid ();
@@ -294,6 +297,7 @@ namespace Csg
 		public Vector3D End;
 		public double RadiusStart = 1;
 		public double RadiusEnd = 1;
+		// 扇角（度）：非零值按 mod 360 归一到 (0, 360]（720/-360 当完整圆柱）；0 = 空实体。
 		public double SectorAngle = 360;
 		public int Resolution = Solid.DefaultResolution3D;
 	}
