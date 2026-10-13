@@ -8,8 +8,10 @@ namespace Csg.Test
 {
     /// <summary>
     /// Tier 2：与闭式答案比对。
-    /// 最强的一条是「凸包周长守恒」—— 对凸实体，正交投影后可见线段总长
-    /// 必须等于投影顶点的 2D 凸包周长。凸包由本工程独立实现（<see cref="ConvexHull"/>），
+    /// 最强的一条是「凸包周长守恒」—— 对本用例的轴向正交视图（盒/立方体，侧面恰好侧视，
+    /// 无正视锐边投影到轮廓内部），可见线段总长必须等于投影顶点的 2D 凸包周长；
+    /// 一般方向上凸多面体的正视锐边会投影到轮廓内部、使总长超过轮廓周长，等式不成立。
+    /// 凸包由本工程独立实现（<see cref="ConvexHull"/>），
     /// 不调用被测代码，因此这是真正的外部 oracle。
     /// </summary>
     [TestFixture]
@@ -60,6 +62,9 @@ namespace Csg.Test
             {
                 var projected = ProjectedVertices(cube, view.Direction);
                 var expected = ConvexHull.PerimeterOf(projected);
+
+                Assert.That(expected, Is.GreaterThan(0.0),
+                    $"{view.Direction.Name}: 投影凸包周长应为正值（若 TrianglesOf 返回空，0 == 0 不应算通过）");
 
                 var actual = SumSegmentLength(view);
 
@@ -237,7 +242,8 @@ namespace Csg.Test
         {
             var total = 0.0;
             foreach (var segment in view.Segments)
-                total += segment.Length;
+                if (segment.IsVisible)
+                    total += segment.Length;
             return total;
         }
     }
