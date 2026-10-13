@@ -20,15 +20,26 @@ namespace Csg.Test
         [Explicit("DEFECT-002: 空操作数的 Subtract/Intersect 语义错误（empty−X 返回反向的 X、empty∩X 返回 X）")]
         public void Random_TreesAreEvaluableAndOutwardFacing()
         {
+            var nonEmpty = 0;
+
             for (long seed = 0; seed < 24; seed++)
             {
                 var tree = NodeGen.Random(seed);
                 var solid = CsgEvaluator.Evaluate(tree);
 
-                Assert.That(solid.Polygons.Count, Is.GreaterThan(0), $"seed={seed} 产出空实体");
+                // 空结果是**合法**的：不相交的交集、被完全减去的差集都会产出零多边形实体。
+                // 所以不能断言每个种子都非空 —— 只断言「非空 ⇒ 法线朝外」。
+                if (solid.Polygons.Count == 0)
+                    continue;
+
+                nonEmpty++;
                 Assert.That(GeometryAssert.SignedVolume(solid), Is.GreaterThan(0),
                     $"seed={seed} 有向体积必须为正；树：{CsgSerialization.ToJson(tree, indented: false)}");
             }
+
+            // 但生成器不能退化成「几乎全空」—— 那样上面那条断言就形同虚设
+            Assert.That(nonEmpty, Is.GreaterThan(12),
+                $"24 个种子应有多数产出非空实体，实际仅 {nonEmpty} 个非空");
         }
 
         [Test]
