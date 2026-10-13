@@ -25,6 +25,7 @@ namespace Csg.Test
 
         public sealed class ManifoldReport
         {
+            public int PolygonCount;          // 多边形总数（0 = 空实体：全零统计看起来「干净」，实为无输入）
             public int EdgeCount;
             public int NonManifoldEdges;      // 被 != 2 个面使用的无向边
             public int DuplicatedEdges;       // 同向重复出现的有向边（绕序不一致）
@@ -74,6 +75,7 @@ namespace Csg.Test
         public static ManifoldReport Analyze(Solid solid)
         {
             var report = new ManifoldReport();
+            report.PolygonCount = solid.Polygons.Count;
             var positions = new List<Vector3D>();
             foreach (var polygon in solid.Polygons)
             {
@@ -163,10 +165,16 @@ namespace Csg.Test
             return report;
         }
 
-        /// <summary>严格封闭定向流形断言（图元与多数布尔结果应满足）。</summary>
+        /// <summary>
+        /// 严格封闭定向流形断言（图元与多数布尔结果应满足）。
+        /// 空实体（PolygonCount == 0）直接拒绝 —— 其全零报告会让四条断言全部真空成立，
+        /// 口径与 <see cref="MeshAssert.AssertClosedOrientedManifold(IReadOnlyList{MeshTriangle}, string?)"/> 的空网格守卫对称。
+        /// </summary>
         public static void AssertClosedOrientedManifold(Solid solid, string? message = null)
         {
             var report = Analyze(solid);
+            Assert.That(report.PolygonCount, Is.GreaterThan(0),
+                $"{Describe(message)}: 多边形数为 0 —— 空实体不是合法实体（若无本断言，空输入会真空通过）| {report}");
             Assert.That(report.NonManifoldEdges, Is.EqualTo(0),
                 $"{Describe(message)}: 有 {report.NonManifoldEdges} 条边不是恰好被两个面共享（T 顶点/裂缝）| {report}");
             Assert.That(report.DuplicatedEdges, Is.EqualTo(0),

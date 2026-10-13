@@ -137,7 +137,10 @@ namespace Csg.Test
         {
             var empty = Cube(4, new Vector3D(-2, 0, 0)).Intersect(Cube(4, new Vector3D(2, 0, 0)));
             Assert.That(empty.Polygons.Count, Is.EqualTo(0));
-            GeometryAssert.AssertSolidInvariants(empty, "空交集");
+            // Plan C / spec §13：空实体不是合法实体，几何不变量 oracle 现显式拒绝空输入。
+            // 旧写法 AssertSolidInvariants(empty) 在零报告上四条断言全部真空通过 —— 是本用例的空转，
+            // 现改为钉住拒绝行为（空实体的报告口径见 GeometryAssertEmptyInputTest）。
+            Assert.Throws<AssertionException>(() => GeometryAssert.AssertSolidInvariants(empty, "空交集"));
             GeometryAssert.AssertVolume(empty, 0.0, 0.0, "空交集");
         }
     }

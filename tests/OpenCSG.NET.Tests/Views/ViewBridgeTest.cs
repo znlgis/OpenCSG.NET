@@ -133,15 +133,61 @@ namespace Csg.Test
             Assert.That(byDefault.Count, Is.EqualTo(explicitThree.Count));
             for (int i = 0; i < byDefault.Count; i++)
                 Assert.That(byDefault[i].Direction.Name, Is.EqualTo(explicitThree[i].Direction.Name));
+
+            // 追加（Plan C / spec §13）：默认路径必须**逐项透传** ViewDirections.OrthographicThree 的同一实例
+            // —— ViewProjector.Project 的 `directions ?? ViewDirections.OrthographicThree` 是引用直接落进
+            // ViewProjection.Direction；按值重建方向对象时 Name 相同而实例不同，旧断言看不出来。
+            for (int i = 0; i < byDefault.Count; i++)
+                Assert.That(ReferenceEquals(byDefault[i].Direction, ViewDirections.OrthographicThree[i]), Is.True,
+                    $"{i}: 默认三视图必须逐项透传 ViewDirections.OrthographicThree 的同一实例");
+        }
+
+        [Test]
+        public void CustomDirections_ArePassedThroughVerbatim()
+        {
+            // 自定义方向列表同样原样透传：Project 不复制 ViewDirection（左视 ≈ 值等价、身份全等）。
+            var cube = Solids.Cube(10, center: true);
+            var views = ViewBridge.ProjectViews(cube, new[] { ViewDirections.Left });
+
+            Assert.That(views.Count, Is.EqualTo(1), "单方向列表应恰产出 1 个视图");
+            Assert.That(ReferenceEquals(views[0].Direction, ViewDirections.Left), Is.True,
+                "自定义方向实例必须原样透传（不得按值重建）");
+            Assert.That(views[0].Direction.Name, Is.EqualTo("左视"));
         }
 
         [Test]
         public void ToViewTriangles_TriangleCountMatchesCsgMesh()
         {
+            // 原始意图（Plan A）：三角化链的三角形数一致。**粒度已升级**（Plan C / spec §13）：
+            // 从「仅比数量」升级为**逐三角形内容比对** —— 每条三角的 A/B/C 顶点坐标与法向逐位相等。
+            // 依据：ViewBridge.ToViewPoint 是纯拷贝（new ViewPoint(p.X, p.Y, p.Z)，无变换），
+            // 顶点实测逐位一致，故用精确相等；法向由两侧**独立实现**（ViewTriangle.Normal 绕序重算
+            // vs StlWriter.NormalOf）给出，立方体全轴对齐下逐位一致（一般浮点下范式化路径可差 1 ULP，
+            // 此夹具不触及；若未来夹具含斜三角，需降级为 Within 并注明量级）。
             var cube = Solids.Cube(10, center: true);
+            var viewTriangles = ViewBridge.ToViewTriangles(cube);
+            var meshTriangles = CsgMesh.TrianglesOf(cube);
 
-            Assert.That(ViewBridge.ToViewTriangles(cube).Count,
-                Is.EqualTo(CsgMesh.TrianglesOf(cube).Count));
+            Assert.That(viewTriangles.Count, Is.EqualTo(meshTriangles.Count)); // 数量断言保留
+            for (int i = 0; i < meshTriangles.Count; i++)
+            {
+                AssertSamePoint(viewTriangles[i].A, meshTriangles[i].A, $"[{i}].A");
+                AssertSamePoint(viewTriangles[i].B, meshTriangles[i].B, $"[{i}].B");
+                AssertSamePoint(viewTriangles[i].C, meshTriangles[i].C, $"[{i}].C");
+
+                var normal = viewTriangles[i].Normal;
+                var expected = StlWriter.NormalOf(meshTriangles[i]);
+                Assert.That(normal.X, Is.EqualTo(expected.X), $"[{i}].Normal.X");
+                Assert.That(normal.Y, Is.EqualTo(expected.Y), $"[{i}].Normal.Y");
+                Assert.That(normal.Z, Is.EqualTo(expected.Z), $"[{i}].Normal.Z");
+            }
+        }
+
+        static void AssertSamePoint(ViewPoint actual, MeshPoint expected, string label)
+        {
+            Assert.That(actual.X, Is.EqualTo(expected.X), $"{label}.X");
+            Assert.That(actual.Y, Is.EqualTo(expected.Y), $"{label}.Y");
+            Assert.That(actual.Z, Is.EqualTo(expected.Z), $"{label}.Z");
         }
     }
 }

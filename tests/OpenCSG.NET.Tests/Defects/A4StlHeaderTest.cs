@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using Csg;
 using NUnit.Framework;
 
@@ -33,13 +34,52 @@ namespace Csg.Test
             try
             {
                 StlWriter.WriteBinary(path, Triangles());
-                var head = File.ReadAllBytes(path).Take(80).ToArray();
+                var head = File.ReadAllBytes(path).Take(StlWriter.HeaderLength).ToArray();
 
                 // 修复前：默认头 "调用方 STL export" → ASCII 编码产出 '?'（0x3F）乱码。
-                Assert.That(head.Any(b => b == (byte)'?'), Is.False, "默认头不应含 '?'（中文经 ASCII 编码的痕迹）");
-                Assert.That(head.TakeWhile(b => b != 0).All(b => b is > 0x1F and < 0x7F), Is.True, "默认头应为可见 ASCII");
+                // A4 审查升级：不再只验「无 '?'、可见 ASCII」，改为**精确钉住 80 字节内容**
+                // —— "STL export" + 70 字节补零（弱断言对同长度换名/多余填充不敏感）。
+                var expected = new byte[StlWriter.HeaderLength];
+                var name = Encoding.ASCII.GetBytes("STL export");
+                Array.Copy(name, expected, name.Length);
+                Assert.That(head, Is.EqualTo(expected),
+                    "默认头应为 'STL export' + 70 字节补零（精确 80 字节）");
             }
             finally { File.Delete(path); }
+        }
+
+        [Test]
+        public void AsciiDefaultHeader_FirstLine_IsSolidStlExport()
+        {
+            var path = TempPath("default-ascii.stl");
+            try
+            {
+                StlWriter.WriteAscii(path, Triangles());
+                var firstLine = File.ReadAllText(path).Split('\n')[0].TrimEnd('\r');
+                Assert.That(firstLine, Is.EqualTo("solid STL export"),
+                    "ASCII 默认名应与二进制默认头同值（'solid ' + 'STL export'，两路径默认不分叉）");
+            }
+            finally { File.Delete(path); }
+        }
+
+        [Test]
+        public void EmptyHeader_IsNotReplacedByDefault_BothWriters()
+        {
+            // 空串头 ≠ 缺省头：只有 null 才落默认名 "STL export"，空串如实写出空头域
+            //（防「空即回退默认」型回归）；修复前后都应绿。
+            var binPath = TempPath("empty.stl");
+            var asciiPath = TempPath("empty-ascii.stl");
+            try
+            {
+                StlWriter.WriteBinary(binPath, Triangles(), header: "");
+                var head = File.ReadAllBytes(binPath).Take(StlWriter.HeaderLength).ToArray();
+                Assert.That(head.All(b => b == 0), Is.True, "空串头应写全零 80 字节头，不得回退默认名");
+
+                StlWriter.WriteAscii(asciiPath, Triangles(), header: "");
+                var firstLine = File.ReadAllText(asciiPath).Split('\n')[0].TrimEnd('\r');
+                Assert.That(firstLine, Is.EqualTo("solid "), "空串头应如实写为 'solid '（空名），不得回退默认名");
+            }
+            finally { File.Delete(binPath); File.Delete(asciiPath); }
         }
 
         [Test]

@@ -42,7 +42,9 @@ public sealed class StlWriteResult
 /// </para>
 /// <para>
 /// <c>header</c> 省略时两条路径都用 ASCII 安全默认值；给定值中的 <c>\r</c>/<c>\n</c> 一律替换为空格——
-/// 二进制头带裸换行、ASCII 的 <c>solid &lt;head&gt;</c> 被拆成两行都会破坏文件结构。超长头截断到 79 字节。
+/// 二进制头带裸换行、ASCII 的 <c>solid &lt;head&gt;</c> 被拆成两行都会破坏文件结构。
+/// 超长头截断到 79 字节**仅发生在二进制路径**（80 字节定长头的末位留零，见 <see cref="WriteBinary"/>）；
+/// ASCII 路径的 <c>solid</c>/<c>endsolid</c> 名完整写出、不截断。
 /// </para>
 /// </summary>
 public static class StlWriter
