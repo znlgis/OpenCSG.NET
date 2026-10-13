@@ -90,6 +90,20 @@ namespace Csg.Test
         /// 只验证过「`[Property]` + 基本类型参数」这一种形状），而是让它生成**几个整数**，
         /// 再由 <see cref="SpecFrom"/> 确定性地映射成两个 spec。
         /// 这样收缩作用在整数上 ⇒ 最小反例就是四个能读懂的数，而不是一个无法解释的网格。
+        /// <para>
+        /// 本属性断言的是**面积**包含排斥恒等式而**不是体积**的 —— 修正轮 3 的有意替换，不是删断言：
+        /// 体积用散度定理，必须选一个积分参考点；库的布尔输出带 T 顶点接缝时读数会随参考点漂移
+        /// （实测斜率 ~1e-5/单位）—— Task 7 为此引入公共参考点，其后（修正轮 1）又补了「自校准漂移预算」。
+        /// 但该预算测的是同一实体在不同参考点上的读数差，是拿被检验的输出自己校准出来的，
+        /// 对**梯度 ~0** 的残差按构造看不见：实测一个 7.34e-6 的残差（梯度 5e-11）就这样穿过预算，
+        /// 约 6% 的随机运行中招（见 `tests/DEFECTS.md` DEFECT-003）。而体积 oracle 的真实偏差
+        /// （相对 ≥ 2.8e-9）与它的数值残差（绝对可达 ~7.3e-6）之间不存在能把两者分开的容差 ——
+        /// 没有任何容差让它在此同时灵敏且稳定。面积**不需要参考点**：它是 |边×边|/2 的求和，
+        /// 平移不变、与三角剖分方式无关 ⇒ T 顶点接缝（重剖分）不扰动它，而重复面会加进自身面积、
+        /// 丢失面会丢掉自身面积。因此本属性只断言面积恒等式；体积恒等式保留在语料驱动的
+        /// <see cref="InclusionExclusion"/> 上 —— 那里的 16 个豁免是按体积失败逐种子推导并验证过的，
+        /// 换口径会作废那份验证，故其两条断言都不动。逐种子覆盖与残留盲区（seed 53）见 `tests/DEFECTS.md`。
+        /// </para>
         /// </summary>
         [FsCheck.NUnit.Property(MaxTest = 200)]
         public void InclusionExclusion_OnFsCheckGeneratedSpecs(
@@ -102,8 +116,7 @@ namespace Csg.Test
             var b = SolidGen.Materialize(specB);
 
             var message = $"FsCheck 反例：sizeSeed={sizeSeed} offsetSeed={offsetSeed} rotationSeed={rotationSeed} kindSeed={kindSeed}";
-            IdentityAssert.AssertInclusionExclusion(a, b, Tol, message);
-            // 面积版：无参考点、对接缝免疫，正是为了压掉体积口径的参考点漂移误报而加。
+            // 面积口径无参考点 ⇒ 无接缝漂移，也就不需要「自校准漂移预算」那种给损坏开后门的补偿（理由见上方 XML doc）。
             IdentityAssert.AssertAreaInclusionExclusion(a, b, Tol, message);
         }
 
