@@ -85,6 +85,9 @@ namespace Csg.Test
                 SectorAngle = 360,
             });
 
+            // 非空前提：两个实体都必须真的产出多边形，防「0 == 0」的空实体等价性假通过。
+            Assert.That(def.Polygons.Count, Is.GreaterThan(0), "前提：默认 360 应是非空实体");
+            Assert.That(explicit360.Polygons.Count, Is.GreaterThan(0), "前提：显式 360 应是非空实体");
             Assert.That(def.Polygons.Count, Is.EqualTo(explicit360.Polygons.Count),
                 "默认值（360）与显式 360 必须走同一分支、产出同形几何");
             Assert.That(GeometryAssert.SignedVolume(def), Is.EqualTo(GeometryAssert.SignedVolume(explicit360)),

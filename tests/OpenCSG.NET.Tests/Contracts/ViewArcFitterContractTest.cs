@@ -23,10 +23,10 @@ namespace Csg.Test
         [Test]
         public void MinRadius_JustAbove_RecognizedAsClosedArc()
         {
-            var curves = ViewArcFitter.Fit(Arc(0.6, 0, 360));
+            var curves = ViewArcFitter.Fit(Arc(0.51, 0, 360));
 
-            Assert.That(curves.Arcs.Count, Is.EqualTo(1), "R=0.6 > MinRadius=0.5 ⇒ 应识别为整圆");
-            Assert.That(curves.Arcs[0].Radius, Is.EqualTo(0.6).Within(1e-6));
+            Assert.That(curves.Arcs.Count, Is.EqualTo(1), "R=0.51 > MinRadius=0.5 ⇒ 应识别为整圆");
+            Assert.That(curves.Arcs[0].Radius, Is.EqualTo(0.51).Within(1e-6));
             Assert.That(curves.Arcs[0].IsClosed, Is.True);
             Assert.That(curves.Segments.Count, Is.EqualTo(0), "识别为弧的段应从折线中移除");
         }
@@ -34,9 +34,9 @@ namespace Csg.Test
         [Test]
         public void MinRadius_JustBelow_KeptAsSegments()
         {
-            var curves = ViewArcFitter.Fit(Arc(0.4, 0, 360));
+            var curves = ViewArcFitter.Fit(Arc(0.49, 0, 360));
 
-            Assert.That(curves.Arcs.Count, Is.EqualTo(0), "R=0.4 < MinRadius=0.5 ⇒ 碎片小圈不落 ARC");
+            Assert.That(curves.Arcs.Count, Is.EqualTo(0), "R=0.49 < MinRadius=0.5 ⇒ 碎片小圈不落 ARC");
             Assert.That(curves.Segments.Count, Is.EqualTo(32), "原折线应全部保留");
         }
 
