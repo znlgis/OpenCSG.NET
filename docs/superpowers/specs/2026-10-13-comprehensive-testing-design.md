@@ -316,9 +316,12 @@ sample 是顶层语句 console app，几何代码无法被测试项目引用。L
 
 ### Plan C（单元/契约回填 + 最小修复）
 
-- 首个缺陷登记要同时落地 `DefectRegistryTest` —— `tests/DEFECTS.md` 已声明双向索引由它强制，但目前两侧皆空、约定未经检验。
-- oracle 不对称：`MeshAssert.AssertClosedOrientedManifold` 已在 Plan A 拒绝空网格输入，但 `GeometryAssert.AssertClosedOrientedManifold(Solid)` 对空实体仍真空通过，两个 `Analyze(empty)` 也都返回看起来干净的全零报告。Plan A 冻结了 `GeometryAssert` 的断言逻辑，Plan C 可以扩展。
-- 补强两个偏弱的断言：`ToViewTriangles_TriangleCountMatchesCsgMesh`（仅比数量）与 `DefaultDirections_AreOrthographicThree`（未钉住 `directions` 透传）。
+> **已完成（Plan C，2026-10-14）**：以下三项全部落地 + A1/A2/A4 最小修复 + L1/L2 回填（覆盖率：0% 类 7→0、类平均 98.5%、未覆盖方法 82→1（死代码））；过程另登记 DEFECT-006/007。细节见 `docs/testing/TEST-REPORT-2026-10-13.md` 的「Plan C」节。
+> **遗留建议（后续计划）**：T8 审查的四条 Minor（斜面探测顺序敏感、两处离散值可精确化、Formats 法向差异未钉住、ToString 断言偏松）；SystemTests 单次偶发失败（26 次未复现）列入 Plan E soak。
+
+- 首个缺陷登记要同时落地 `DefectRegistryTest` —— `tests/DEFECTS.md` 已声明双向索引由它强制，但目前两侧皆空、约定未经检验。 ✅ 已落地（静态扫描双向索引 + 纯函数单测 + 负向控制；覆盖开放缺陷 001–007）。
+- oracle 不对称：`MeshAssert.AssertClosedOrientedManifold` 已在 Plan A 拒绝空网格输入，但 `GeometryAssert.AssertClosedOrientedManifold(Solid)` 对空实体仍真空通过，两个 `Analyze(empty)` 也都返回看起来干净的全零报告。Plan A 冻结了 `GeometryAssert` 的断言逻辑，Plan C 可以扩展。 ✅ 已扩展（`PolygonCount` + 守卫；1 个既有测试的真空依赖已修正）。
+- 补强两个偏弱的断言：`ToViewTriangles_TriangleCountMatchesCsgMesh`（仅比数量）与 `DefaultDirections_AreOrthographicThree`（未钉住 `directions` 透传）。 ✅ 已补强（144 项逐元素比对；`ReferenceEquals` 透传钉 + 自定义方向列表用例）。
 
 ### Plan D（golden + 集成）
 

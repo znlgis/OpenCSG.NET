@@ -577,3 +577,78 @@ $ ls tests/OpenCSG.NET.Tests/Results/*_.stl 2>/dev/null | wc -l
 
 `src/` 零改动；`NotExecuted` 由 101 增至 160（新增 59 个 DEFECT-005 语料豁免）；SystemTests 执行通过数
 基线 1033（B2 开工）→ 收口 1057（= 1033 + 24 个实际执行的新用例）。
+
+## Plan C — L1/L2 单元与契约回填 + A1/A2/A4 最小修复（2026-10-14）
+
+承接 spec §13「Plan C」与阶段表第 3 阶段：「L1/L2 单元与契约回填；A1/A2/A4 最小修复 + 回归测试 | 0% 模块覆盖关闭」。
+本计划含**全程首次 `src/` 改动**：仅 spec §9 批准的 A1/A2/A4 三条最小修复（各 ≤5 语义行 + 复现先行 + 全量套件安全网）。
+
+### 覆盖率前后对照（两测试项目 cobertura 并集；脚本 `artifacts/planCcovFinal/analyze*.py`，gitignored）
+
+| 指标 | Plan C 开工（T1 复测） | 收口（T9 复测） |
+| --- | --- | --- |
+| src 类总数 | 88 | 88 |
+| 行覆盖 0% 的类 | **7**（CsgHelpers、HalfPlaneCut、PrimitiveConvention、StlWriter、StlWriteResult、ViewMeshReader、OrthographicViews） | **0** |
+| 行覆盖 <50% 的类 | 2（Matrix4x4 44.0%、Formats 48.0%） | **0**（全部 ≥50%） |
+| 类平均行覆盖 | （低值区主导） | **98.5%** |
+| 完全未覆盖方法数 | **82** | **1**（`Solid.CombinedBounds`——私有、零调用点的死代码；语义由 `CombinedBoundsAll` 公共路径旁证） |
+
+说明：spec 的 L1 清单写于 B1/B2 之前，实测已收窄（`View*`(23 类型)、`CsgMesh`、`Tessellation` 等大部已被属性/遮挡测试间接覆盖）；实际回填清单以 T1 的 82 条为准逐项销账（71 条由 T8、6 条由 T7、4 条结构性/由既有测试覆盖、1 条死代码）。
+
+### A1/A2/A4 最小修复（已写入 `tests/DEFECTS.md`「## 已修复」表）
+
+| ID | 缺陷 | 复现（修复前红） | 修复 | 回归 |
+| --- | --- | --- | --- | --- |
+| A1 | `Solid` 的 `Bounds` 惰性缓存无失效机制（公共可变 `Polygons` 字段）；`FromPolygons` 别名持有调用方 list | 缓存预热后原地换多边形（6→6 面）再布尔：读 **2000/12 面** vs 干净等价 **1500/6 面**；别名：调用方 `Clear()` 后实体被清空（0≠6） | 删缓存每次现算（注释：调用点 MayOverlap/BSP 树构造/CombinedBoundsAll，~6–8 次 O(n)/运算可忽略）+ `FromPolygons` 防御性复制 | `A1SolidCacheTest`（2 用例）；SystemTests 1057/0/160 不变（布尔内核安全网） |
+| A2 | `Solids.Cylinder` 的 `SectorAngle` 只处理 `>360`：`720 % 360 = 0`、`-90` 都落进静默空实体 | 720/-90 ⇒ **0 多边形**（期望 36/40） | 非零角归一 `(0,360]`（`720/-360 → 360`、`-90 → 270`；`0` 保持空） | `A2SectorAngleTest`（4 用例：整圈逐位一致/负数=270/解析体积 ±0.5%/零角契约）；SystemTests 不变 |
+| A4 | `StlWriter` 二进制默认头中文经 ASCII ⇒ `?` 乱码；两条路径头无换行净化 | 默认头含 `0x3F`；`\r\n` 头把 ASCII 结构切成两行 | 默认头 `"STL export"`（双路径统一）+ `\r`/`\n` → 空格净化（79 字节截断原已有） | `A4StlHeaderTest`（6 用例：精确 80 字节默认头/首行名/空串/净化/79-80-81 边界/双格式写读往返）；SystemTests 不变 |
+
+### 其余落地（评审/fix round 全程记录见 `.superpowers/sdd/2026-10-13-comprehensive-testing-plan-c/progress.md`）
+
+- **`DefectRegistryTest`**（spec §13 Plan C 第一条）：静态扫描强制 `DEFECTS.md` 规则 3 双向索引（册→测试 grep、`Explicit("DEFECT-`→册）；纯函数单测 + 两个方向的负向控制均实测变红后还原（17 用例）。
+- **`GeometryAssert` 空输入对称**：`ManifoldReport.PolygonCount` + `AssertClosedOrientedManifold(Solid)` 的 `>0` 守卫（消息对齐 MeshAssert）；发现 1 个既有测试 `GeometryInvariantTest.EmptyIntersection_ProducesNoPolygons` 依赖旧真空通过行为——已改为断言拒绝（红控制：去守卫 ⇒ 3 用例红）。
+- **两处弱断言补强**：`DefaultDirections_AreOrthographicThree` 增逐项 `ReferenceEquals` 透传钉 + 自定义方向列表透传新用例；`ToViewTriangles_TriangleCountMatchesCsgMesh` 升级为 **144 项逐元素**（12 三角形 × 3 顶点 × 3 轴 + 法向）精确比对。
+- **L2 契约与边界（T7，65 用例）**：全部已记录 throw 路径逐条核契约后断言（异常类型/ParamName 精确）；退化输入（1e-5 容差临界对、1e12 尺度精确包络、±0、扇形角、深 JSON）；fitter 五门限 ±ε；StlWriter 头输入矩阵补全。**证伪简报假设**：深 JSON 读路径 64 层深守卫生效（可捕获 `JsonException`），非 StackOverflow。
+- **L1 单元（T8，73 用例）**：`CsgHelpers` 16 方法（解析体积/包络/离散公式）、Stl 双通道内容级（二进制 84+50N 字节布局、ASCII 精确文本、手推法向、写读往返）、**`Matrix4x4` 矩阵×矩阵首次测试**（R×T/T×R 手算逐元素、结合律、恒等）、`PrimitiveConvention`/`HalfPlaneCut`/`Formats.WriteStl` 功能面、值类型与 `OrthographicViews` 杂项。
+
+### DEFECTS.md 变更（本计划）
+
+- **新增 DEFECT-006**（中，只报告）：`Polygon` 缓存同模式残留——原地改 `Vertices` 后 `BoundingBox`/`BoundingSphere` 陈旧 ⇒ `Union` 的 `MayOverlap` 误判（两场景复现：2000/12 vs 1500/6；12333.33/12 vs 12000/14 位同）；同触发还使只读 `Plane` 过期（未预热路径 BSP >75 s 不返回）。`D6PolygonCacheTest`（2 `[Explicit]`）+ 登记行。A1 批准范围仅 `Solid`，Polygon 归 Plan D+ 决策。
+- **新增 DEFECT-007**（低，只报告）：`CsgSerialization.ToJson` 写出路径无独立深度守卫——深树（阈值实测 ≈1020–1030 层，随栈容量 ≈1.5 KB/层线性缩放）触发**不可捕获 StackOverflow**（`ToJson(2000)` 主线程 ⇒ 进程中止）；读路径 `FromJson` 有 64 层守卫。`D7DeepTreeStackOverflowTest`（`[Explicit]`，8 MB 栈线程断言同深可捕获侧）+ 登记行。
+
+### 用例与时间预算
+
+| 项 | 值 |
+| --- | --- |
+| 本计划新增用例 | **176**（DefectRegistryTest 17 + A1/A2/A4 各 2/4/4 + D6×2 + D7×1 + GeometryAssert/弱断言 8 + L2 65 + L1 73；其中 3 个 Explicit 不计入通过数） |
+| Tests（收口） | **302 通过 / 0 失败**（TRX：total=306、`NotExecuted`×4 = DEFECT-001 + DEFECT-006×2 + DEFECT-007） |
+| SystemTests（收口） | **1057 通过 / 0 失败 / 160 NotExecuted**（total=1217；B1/B2 基线全程未变——A1/A2/A4 修复的内核安全网） |
+| Tests 墙钟 | ~2.2 s |
+| SystemTests 墙钟 | ~11.7 s（≪ spec §7 的 8 分钟） |
+
+### 收口验证（全量，实测输出）
+
+```text
+$ dotnet build OpenCSG.NET.slnx -c Release --no-incremental 2>&1 | tail -3
+    0 个错误
+
+$ dotnet test tests/OpenCSG.NET.Tests -c Release --no-build 2>&1 | tail -2
+已通过! - 失败:     0，通过:   302，已跳过:     0，总计:   302，持续时间: 847 ms - OpenCSG.NET.Tests.dll (net8.0)
+（TRX：total=306、`NotExecuted`×4）
+
+$ dotnet test tests/OpenCSG.NET.SystemTests -c Release --no-build 2>&1 | tail -2
+已通过! - 失败:     0，通过:  1057，已跳过:     0，总计:  1057，持续时间: 10 s - OpenCSG.NET.SystemTests.dll (net8.0)
+
+$ ls tests/OpenCSG.NET.Tests/Results/*.stl | wc -l
+45
+$ ls tests/OpenCSG.NET.Tests/Results/*_.stl 2>/dev/null | wc -l
+0
+```
+
+`src/` 改动仅 A1/A2/A4 三处（+ 2 处注释/文档）；缺陷册开放 7 条（001–007）+ 已修复 3 条（A1/A2/A4），双向索引由 `DefectRegistryTest` 强制。
+
+### 观察项（未闭合，供后续计划）
+
+- **SystemTests 单次偶发失败（未复现）**：T7 提交后的一次全量运行读 1056/1057（失败用例名未捕获——当时未开 TRX），随后 **26 次连续复跑全绿**。列为 Plan E（稳健性/并行）的 soak 观察项。
+- **T8 审查遗留（Minor）**：`CsgHelpersTest` 的斜面探测按 Polygons 顺序取首个匹配（重排敏感）；`CylinderAlongX`/`RevolvedStack` 用 5% 解析带宽而可给精确 12 边形离散值；`Formats` 写 `Plane.Normal` 不重算的差异未被非绕序一致面钉住；`ToString` 数字断言偏松。
+- **覆盖率分析脚本（gitignored）**：`planCtask8cov/analyze8.py` 的目标匹配器有笔误（65 条假 NOT FOUND），结论已由评审独立复核；后续引用前需修。

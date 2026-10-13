@@ -120,9 +120,14 @@
 
 ## 完成定义（Plan C）
 
-- [ ] `DefectRegistryTest` 落地且双向索引强制（含纯函数单测与负向验证）。
-- [ ] A1/A2/A4 三条最小修复（各 ≤5 行）+ 复现用例（修复前红）+ 回归，已写入「已修复」表。
-- [ ] `GeometryAssert` 空输入对称；两处弱断言补强（含 `ReferenceEquals` 透传钉与逐三角形内容比对）。
-- [ ] L2 throw 路径与退化输入按 spec 清单回填（或发现缺陷并登记）。
-- [ ] L1 0% 模块按实测清单回填；覆盖率数字前后对照入报告。
-- [ ] 全量构建 0 警告 0 错误；`Results/` 45/0；`src/` 除 A1/A2/A4 外零改动。
+**状态：已全部完成（2026-10-14，分支 `test/comprehensive-suite-plan-c`，末 commit `cfdd76f` + 收口 commit）。** 逐项核对：
+
+- [x] `DefectRegistryTest` 落地且双向索引强制（17 用例：纯函数单测 + 两活体断言；两方向负向控制实测变红后还原）。
+- [x] A1/A2/A4 三条最小修复（各 ≤5 语义行；复现先行、修复前红读数有据）+ 回归，已写入「## 已修复」表（A1：2000/12 vs 1500/6；A2：720/-90 空实体；A4：默认头 `?` 乱码）。
+- [x] `GeometryAssert` 空输入对称（`PolygonCount` + 守卫；1 个既有测试的真空依赖已修正）；两处弱断言补强（`ReferenceEquals` 逐项透传钉 + 144 项逐元素比对）。
+- [x] L2 throw 路径与退化输入按实测清单回填（65 用例；全部 throw 契约核实现行——零缺陷；证伪深 JSON StackOverflow 假设，转而发现并登记写出路径的 **DEFECT-007**）。
+- [x] L1 0% 模块按实测清单回填（73 用例；82 条清单销账至**仅剩 1 个死代码方法**；覆盖率前后对照入 TEST-REPORT）。
+- [x] 全量构建 0 警告 0 错误；`Results/` 45/0；`src/` 除 A1/A2/A4（+ 2 处注释/文档）外零改动；Tests 302/0、SystemTests 1057/0/160（内核安全网全程未变）。
+
+> 本计划过程另登记 **DEFECT-006**（Polygon 缓存同模式，复现成立）与 **DEFECT-007**（深树 ToJson 栈溢出）；开放缺陷 001–007 的双向索引由 `DefectRegistryTest` 强制。
+> 逐任务评审/fix round/核对记录与遗留观察项（含 SystemTests 单次偶发未复现、T8 审查 Minor 清单）见 `.superpowers/sdd/2026-10-13-comprehensive-testing-plan-c/progress.md`。
