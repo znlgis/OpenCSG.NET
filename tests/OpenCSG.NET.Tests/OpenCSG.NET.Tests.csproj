@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\OpenCSG.NET\OpenCSG.NET.csproj" />
+    <ProjectReference Include="..\OpenCSG.NET.TestKit\OpenCSG.NET.TestKit.csproj" />
   </ItemGroup>
 
 </Project>

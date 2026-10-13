@@ -17,7 +17,7 @@ namespace Csg.Test
     /// 另外把「只被一个面使用的边」细分为 T 顶点（有顶点落在该边内部）与真实裂缝（洞），
     /// 前者是 BSP 布尔的已知产物（库内无 T 顶点清理），后者一定是缺陷。
     /// </summary>
-    internal static class GeometryAssert
+    public static class GeometryAssert
     {
         /// <summary>顶点在同一位置合并的容差：远大于接缝处 1e-16 浮点噪声、远小于 CSG 的 1e-5 容差。</summary>
         public const double MergeTolerance = 1e-6;

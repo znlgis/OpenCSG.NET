@@ -10,6 +10,7 @@
     <Project Path="src/OpenCSG.NET/OpenCSG.NET.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/OpenCSG.NET.TestKit/OpenCSG.NET.TestKit.csproj" />
     <Project Path="tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj" />
   </Folder>
 </Solution>
