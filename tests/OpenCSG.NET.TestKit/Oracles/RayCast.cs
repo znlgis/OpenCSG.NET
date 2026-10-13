@@ -7,7 +7,7 @@ namespace Csg.Test
     /// Tier 5：射线-三角形求交（Möller–Trumbore，标量实现）与最近命中查询。
     /// <para>
     /// <b>独立实现</b>：本类是遮挡判定的几何基元 oracle，必须**独立于被测消隐链路** ——
-    /// 不得调用 <see cref="ViewProjector"/> / <see cref="DepthRaster"/> 的任何成员；
+    /// 不得调用 <see cref="ViewProjector"/> / <c>DepthRaster</c> 的任何成员；
     /// 一旦复用被测代码，判定就不再是独立对照（与 <see cref="ConvexHull"/> 的定位一致）。
     /// 与视图方向（<c>ViewDirection</c>）无关，纯几何。
     /// </para>
@@ -25,7 +25,7 @@ namespace Csg.Test
         /// 命中点 = <paramref name="origin"/> + `t` × <paramref name="direction"/>；
         /// <paramref name="direction"/> 不必归一化，但调用方传单位向量，此时 `t` 即欧氏距离
         /// （`t` 按传入向量长度计）。仅接受正向命中（`t &gt; 0`）；射线与三角形异面/背离/在三角形外
-        /// 时返回 <c>false</c>，此时 `t` 为 0（无意义，调用方不得读取）。
+        /// 时返回 <c>false</c>；返回 false 时 `t` 的值无意义（调用方不得读取）。
         /// </para>
         /// <para>
         /// <b>边界容差</b>：<c>|det| &lt; 1e-14</c> 判为射线平行于三角形平面（退化三角形 det ≡ 0，
