@@ -22,9 +22,11 @@ namespace Csg.Test
             var triangles = ViewBridge.ToViewTriangles(solid);
             var views = ViewBridge.ProjectViews(solid, ViewDirections.OrthographicThree);
 
-            var stats = OcclusionAssert.AssertVisibilityMatchesRayCast(views, triangles);
+            // 逐视图调用（而非聚合一次）：防空洞守卫按调用判定，聚合调用无法发现单个视图零判定。
+            foreach (var view in views)
+                OcclusionAssert.AssertVisibilityMatchesRayCast(new[] { view }, triangles,
+                    $"boxes-shifted/{view.Direction.Name}");
 
-            Assert.That(stats.CheckedSamples, Is.GreaterThan(0), "oracle 空洞");
             Assert.That(HiddenCountOf(views, "左视"), Is.GreaterThan(0),
                 "前块应遮住后块的一部分（DEFECT-004 之外的首个 H>0 夹具）");
         }
@@ -36,9 +38,11 @@ namespace Csg.Test
             var triangles = ViewBridge.ToViewTriangles(solid);
             var views = ViewBridge.ProjectViews(solid, ViewDirections.OrthographicThree);
 
-            var stats = OcclusionAssert.AssertVisibilityMatchesRayCast(views, triangles);
+            // 逐视图调用（而非聚合一次）：防空洞守卫按调用判定，聚合调用无法发现单个视图零判定。
+            foreach (var view in views)
+                OcclusionAssert.AssertVisibilityMatchesRayCast(new[] { view }, triangles,
+                    $"lshape/{view.Direction.Name}");
 
-            Assert.That(stats.CheckedSamples, Is.GreaterThan(0), "oracle 空洞");
             Assert.That(HiddenCountOf(views, "俯视"), Is.GreaterThan(0), "阶梯远侧棱边应被阶梯遮挡");
             Assert.That(HiddenCountOf(views, "左视"), Is.GreaterThan(0), "阶梯远侧棱边应被阶梯遮挡");
         }
@@ -52,9 +56,11 @@ namespace Csg.Test
             // 属 DEFECT-004 机制②（消隐栅格把掠射轮廓切成 V/H 交替碎段）的行为域，由该缺陷统一承接。
             var views = ViewBridge.ProjectViews(solid, new[] { ViewDirections.Front, ViewDirections.Top });
 
-            var stats = OcclusionAssert.AssertVisibilityMatchesRayCast(views, triangles);
+            // 逐视图调用（而非聚合一次）：防空洞守卫按调用判定，聚合调用无法发现单个视图零判定。
+            foreach (var view in views)
+                OcclusionAssert.AssertVisibilityMatchesRayCast(new[] { view }, triangles,
+                    $"plate-drilled/{view.Direction.Name}");
 
-            Assert.That(stats.CheckedSamples, Is.GreaterThan(0), "oracle 空洞");
             Assert.That(HiddenCountOf(views, "主视"), Is.GreaterThan(0), "空腔远侧轮廓应被遮挡");
             Assert.That(HiddenCountOf(views, "俯视"), Is.GreaterThan(0), "空腔远侧轮廓应被遮挡");
         }

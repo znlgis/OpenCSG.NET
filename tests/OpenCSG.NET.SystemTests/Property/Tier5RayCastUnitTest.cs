@@ -139,5 +139,16 @@ namespace Csg.Test
             var t = RayCast.NearestHitDistance(triangles, new ViewPoint(0, 0, -1), new ViewVector(0, 1, 0));
             Assert.That(double.IsPositiveInfinity(t), Is.True);
         }
+
+        [Test]
+        public void OracleConstants_MatchViewProjectorConstants()
+        {
+            // 常量漂移守卫：OcclusionAssert 按被测实现口径独立复算 bias/cell，两个口径常量使用字面量
+            // （有意不引用 ViewProjector）—— 库常量若变更，本测试失败提示同步 oracle。
+            Assert.That(OcclusionAssert.ScreenResolution, Is.EqualTo(ViewProjector.RasterResolution),
+                "OcclusionAssert.ScreenResolution 必须与 ViewProjector.RasterResolution 同口径");
+            Assert.That(OcclusionAssert.DepthBiasFactor, Is.EqualTo(ViewProjector.DepthBiasFactor),
+                "OcclusionAssert.DepthBiasFactor 必须与 ViewProjector.DepthBiasFactor 同口径");
+        }
     }
 }

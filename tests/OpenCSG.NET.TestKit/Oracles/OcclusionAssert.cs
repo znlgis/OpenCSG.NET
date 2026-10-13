@@ -60,6 +60,19 @@ namespace Csg.Test
     /// 会系统性产生 INDET 或两侧都不成立的判定；这类形状的行为域由 DEFECT-004 机制②统一承接，
     /// 夹具应避免把掠射视角放进 oracle 覆盖。
     /// </para>
+    /// <para>
+    /// <b>已知边界（覆盖范围的构造性界限）</b>：
+    /// <list type="bullet">
+    /// <item><b>弧实体不产生采样点</b>：采样只看 <c>view.Segments</c>；被弧识别的几何已从 Segments 移出，
+    /// 弧的 <c>IsVisible</c>（多数票）只在 0.06 径向容差内泄漏进邻近采样点的 proj 类集 ⇒
+    /// 弧上的错误可见性只有在贴近其圆周处存活的线段上才会被间接检查。</item>
+    /// <item><b>INDET 带恰是投影器的判定区</b>：±cell 探针把格量化敏感带标为 INDET ⇒
+    /// <c>DepthRaster.Split</c> 的切分点放置错误与掠射族（DEFECT-004 机制②）在构造上不可由本 oracle 判别；
+    /// 报告不得超过此界限宣称覆盖。</item>
+    /// <item><b>possible 类集是并集</b>：重合边之间可以互换见证（A 的 robust V 可被 B 的输出 V 掩盖）——
+    /// 这是 2D 图纸语义下的有意抽象。</item>
+    /// </list>
+    /// </para>
     /// </summary>
     public static class OcclusionAssert
     {
@@ -75,11 +88,11 @@ namespace Csg.Test
         /// <summary>失败明细最多收集的条数（全部采样扫描完后一次性断言）。</summary>
         const int MaxFailureDetails = 10;
 
-        /// <summary>与 <c>ViewProjector.RasterResolution</c> 同口径的屏幕长边分辨率。</summary>
-        const double ScreenExtentResolution = 900.0;
+        /// <summary>与 <c>ViewProjector.RasterResolution</c> 同口径的屏幕长边分辨率（Tier5RayCastUnitTest 有常量漂移守卫）。</summary>
+        public const int ScreenResolution = 900;
 
-        /// <summary>与 <c>ViewProjector.DepthBiasFactor</c> 同口径的深度偏置系数。</summary>
-        const double DepthBiasFactor = 1e-3;
+        /// <summary>与 <c>ViewProjector.DepthBiasFactor</c> 同口径的深度偏置系数（Tier5RayCastUnitTest 有常量漂移守卫）。</summary>
+        public const double DepthBiasFactor = 1e-3;
 
         /// <summary>与 <c>ViewProjector.MinDepthGap</c> 同口径的偏置下限。</summary>
         const double MinDepthGap = 1e-9;
@@ -140,7 +153,9 @@ namespace Csg.Test
                     }
                 }
 
-                var bias = (maxD - minD) * DepthBiasFactor + MinDepthGap;
+                // 与 ViewProjector.Build 同口径：深度跨度下限 1e-9（退化 —— 无正视三角形 —— 时避免 bias = −∞）。
+                var range = Math.Max(maxD - minD, 1e-9);
+                var bias = range * DepthBiasFactor + MinDepthGap;
 
                 // ② 候选特征边（规则与 ViewProjector.ProjectView ①② 逐条一致，独立实现）：
                 //    边界边 / 轮廓边（两侧正对性不同）/ 两侧正对时的锐边；两侧都背对 ⇒ 不画。
@@ -182,7 +197,7 @@ namespace Csg.Test
                     if (v > maxV) maxV = v;
                 }
 
-                var cell = Math.Max(Math.Max(maxH - minH, maxV - minV) / ScreenExtentResolution, 1e-9);
+                var cell = Math.Max(Math.Max(maxH - minH, maxV - minV) / ScreenResolution, 1e-9);
 
                 // ④ 候选边投影（2D 端点），供重合匹配与探针基点参数化复用。
                 var projectedA = new ViewPoint2[candidates.Count];
@@ -196,6 +211,7 @@ namespace Csg.Test
                 }
 
                 // ⑤ 逐输出线段取内部采样点，做双侧判定。
+                //    采样密度：每段 3 个内部采样点（t=1/4、1/2、3/4）⇒ 检测分辨率 ≈ 段长的 25%，且 Clean 丢弃的短于 minLength 的碎段不被采样。
                 foreach (var segment in view.Segments)
                 {
                     if (segment.Length < ZeroLengthSegment)
@@ -315,14 +331,17 @@ namespace Csg.Test
             // 防空洞：没有任何采样点被判定时断言恒真，oracle 形同虚设。
             Assert.That(stats.CheckedSamples, Is.GreaterThan(0),
                 $"{prefix}oracle 空洞：没有任何采样点被双侧判定"
-                + $"（indeterminate={stats.IndeterminateSamples}）");
+                + $"（indeterminate={stats.IndeterminateSamples}"
+                + $" indet/checked={stats.IndeterminateSamples}/{stats.CheckedSamples}）");
 
             var aggregate = new StringBuilder();
             aggregate.Append(prefix).Append("遮挡 oracle 失败：")
                 .Append(stats.FailedSamples).Append(" 个采样点不一致")
                 .Append("（checked=").Append(stats.CheckedSamples)
                 .Append(" indeterminate=").Append(stats.IndeterminateSamples)
-                .Append(" failed=").Append(stats.FailedSamples).Append("）");
+                .Append(" failed=").Append(stats.FailedSamples)
+                .Append(" indet/checked=").Append(stats.IndeterminateSamples)
+                .Append('/').Append(stats.CheckedSamples).Append("）");
             foreach (var fail in fails)
                 aggregate.Append(Environment.NewLine).Append("  - ").Append(fail);
 
