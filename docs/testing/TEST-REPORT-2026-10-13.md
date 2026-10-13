@@ -131,3 +131,77 @@ samples 与 perf 编译通过，**无新发现**。注：CI 至今只构建 `src
 | 通过 / 失败 / 跳过 / 总计 | 122 / 0 / 0 / 122（与 122/0/0 基线一致） |
 | `tests/OpenCSG.NET.Tests/Results/` | 45 个 `.stl`，目录条目 45，构建与测试后均无残留 |
 | ApiCompat 单独构建 | 0 警告 0 错误（Step 4 的 grep 仅命中汇总行「0 个警告 / 0 个错误」） |
+
+## Plan B1 — 属性测试基础设施
+
+### Plan B1 · Task 1：SystemTests 骨架与 FsCheck spike
+
+| 项 | 结果 |
+| --- | --- |
+| `tests/OpenCSG.NET.SystemTests` | 已建立（net8.0 / NUnit / Nullable enable） |
+| FsCheck 版本决策 | 降级 **2.16.6**（可用）。3.4.0 不可用：其要求 NUnit ≥ 4.0.0，与本仓 NUnit 3.13.3 冲突，还原阶段即失败（NU1605）。csproj 现引用 `FsCheck.NUnit` 2.16.6 |
+| spike 证据 | 生成 / 失败 / 收缩三者均成立——内层 `Prop.ForAll<int>(v => Math.Abs(v) <= 1)` 的最小反例被收缩到 `2`（多次运行观察到 `Original: -2 → Shrunk: 2`、`Original: 3 → Shrunk: 2`）。3.4.0 的原始报错为 NU1605（见下） |
+| 现有套件未受影响 | 122 通过 / 0 失败 / 0 跳过 |
+| 解决方案与系统套件 | 含 SystemTests 共 **8** 个工程，0 警告 0 错误；骨架用例 1 通过 / 0 失败 / 0 跳过；`Results/` 仍为 45 个 `.stl`、0 个 `*_.stl` |
+
+**spike 复现命令**（探针用例 `Spike_FsCheckCanGenerateAndShrink` 位于 `SolidSpecPropertyTest`；结论确定后已删除，不留在仓库）
+
+```bash
+dotnet add tests/OpenCSG.NET.SystemTests/OpenCSG.NET.SystemTests.csproj package FsCheck.NUnit --version 3.4.0
+dotnet remove tests/OpenCSG.NET.SystemTests/OpenCSG.NET.SystemTests.csproj package FsCheck.NUnit
+dotnet add tests/OpenCSG.NET.SystemTests/OpenCSG.NET.SystemTests.csproj package FsCheck.NUnit --version 2.16.6
+dotnet test tests/OpenCSG.NET.SystemTests/OpenCSG.NET.SystemTests.csproj -c Release --filter "FullyQualifiedName~Spike_FsCheckCanGenerateAndShrink"
+```
+
+**3.4.0 原始输出（逐字）**
+
+```text
+D:\self\code\OpenCSG.NET\tests\OpenCSG.NET.SystemTests\OpenCSG.NET.SystemTests.csproj : error NU1605: 错误形式的警告: 检测到包降级: NUnit 从 4.0.0 降级到 3.13.3。直接从项目引用包以选择不同版本。 
+D:\self\code\OpenCSG.NET\tests\OpenCSG.NET.SystemTests\OpenCSG.NET.SystemTests.csproj : error NU1605:  OpenCSG.NET.SystemTests -> FsCheck.NUnit 3.4.0 -> NUnit (>= 4.0.0 && < 5.0.0) 
+D:\self\code\OpenCSG.NET\tests\OpenCSG.NET.SystemTests\OpenCSG.NET.SystemTests.csproj : error NU1605:  OpenCSG.NET.SystemTests -> NUnit (>= 3.13.3)
+  未能还原 D:\self\code\OpenCSG.NET\tests\OpenCSG.NET.SystemTests\OpenCSG.NET.SystemTests.csproj (用时 258 毫秒)。
+```
+
+**2.16.6 原始输出（逐字；补上 `using FsCheck;` 后首次可编译运行，即分支 (a)：能生成、能失败、能收缩）**
+
+```text
+失败 Spike_FsCheckCanGenerateAndShrink [136 ms]
+  错误消息:
+   Falsifiable, after 1 test (1 shrink) (StdGen (349168651,297685596)):
+Original:
+3
+Shrunk:
+0
+with exception:
+System.Exception: Falsifiable, after 1 test (1 shrink) (StdGen (349646196,297685596)):
+Original:
+-2
+Shrunk:
+2
+```
+
+**2.16.6 重复运行节选**（同一用例、不同种子；收缩稳定收敛到 ±2 这一最小反例）
+
+```text
+System.Exception: Falsifiable, after 1 test (1 shrink) (StdGen (1043014523,297685596)):
+Original:
+-2
+Shrunk:
+2
+System.Exception: Falsifiable, after 1 test (1 shrink) (StdGen (1056960782,297685596)):
+Original:
+-2
+Shrunk:
+2
+System.Exception: Falsifiable, after 2 tests (1 shrink) (StdGen (1085138062,297685596)):
+Original:
+3
+Shrunk:
+2
+```
+
+**结论与后续任务用法注意**
+
+- 本 spike 的落点是「(b) 3.4.0 不兼容 → 降级 2.16.6 后成立」，既不是 3.4.0 直接可用，也不是「不可用」。Task 7-9 的属性测试**保留生成 + 收缩能力**，无需落入「纯语料驱动、以种子复现」的降级路径。
+- 2.16.6 下 `QuickCheckThrowOnFailure` 是 `FsCheck.CheckExtensions` 上的**扩展方法**（命名空间 `FsCheck`），属性测试文件需 `using FsCheck;`——若照抄 3.x 文档且缺该 using，会得到 `CS1061`（本 spike 首次尝试即此报错，补 using 后通过）。`[FsCheck.NUnit.Property(MaxTest = n)]` 在 2.16.6 可用，`MaxTest` / `Replay` / `Verbose` / `Arbitrary` 等属性齐备。
+- 骨架用例与后续生成器均不依赖 FsCheck；FsCheck 只提供「生成 + 收缩」。

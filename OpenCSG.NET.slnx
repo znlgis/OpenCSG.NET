@@ -12,6 +12,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/OpenCSG.NET.ApiCompat/OpenCSG.NET.ApiCompat.csproj" />
     <Project Path="tests/OpenCSG.NET.TestKit/OpenCSG.NET.TestKit.csproj" />
+    <Project Path="tests/OpenCSG.NET.SystemTests/OpenCSG.NET.SystemTests.csproj" />
     <Project Path="tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj" />
   </Folder>
 </Solution>
