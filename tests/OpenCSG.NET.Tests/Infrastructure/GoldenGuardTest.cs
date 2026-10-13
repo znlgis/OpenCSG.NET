@@ -7,7 +7,7 @@ using NUnit.Framework;
 namespace Csg.Test
 {
     /// <summary>
-    /// 验证 golden 门禁本身有效：门禁检查逻辑必须能发现残留的 *_ .stl，
+    /// 验证 golden 门禁本身有效：门禁检查逻辑必须能发现残留的 *_ .stl 与 *_ .json，
     /// 且 GoldenPaths 必须解析到真实的 Results 目录（否则门禁形同虚设）。
     /// </summary>
     [TestFixture]
@@ -74,6 +74,68 @@ namespace Csg.Test
             finally
             {
                 File.Delete(probe);
+            }
+        }
+
+        [Test]
+        public void FindPendingGoldens_DetectsRejectedJsonFile()
+        {
+            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location);
+            var probe = Path.Combine(results, "__GoldenGuardProbe___.json");
+            File.WriteAllText(probe, "{\"probe\":true}\n");
+
+            try
+            {
+                var pending = GoldenGuard.FindPendingGoldens(results);
+
+                Assert.That(pending, Does.Contain(probe));
+            }
+            finally
+            {
+                File.Delete(probe);
+            }
+        }
+
+        [Test]
+        public void FindPendingGoldens_IgnoresAcceptedJsonFile()
+        {
+            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location);
+            // 与 .stl 同理：已接受的 JSON 探针不以 "_" 结尾，不能被误判为残留。
+            var probe = Path.Combine(results, "__GoldenGuardProbe.json");
+            File.WriteAllText(probe, "{\"probe\":true}\n");
+
+            try
+            {
+                var pending = GoldenGuard.FindPendingGoldens(results);
+
+                Assert.That(pending, Does.Not.Contain(probe));
+            }
+            finally
+            {
+                File.Delete(probe);
+            }
+        }
+
+        [Test]
+        public void FindPendingGoldens_DetectsMixedRejectedFiles()
+        {
+            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location);
+            var stlProbe = Path.Combine(results, "__GoldenGuardMixedProbe___.stl");
+            var jsonProbe = Path.Combine(results, "__GoldenGuardMixedProbe___.json");
+            File.WriteAllText(stlProbe, "solid probe\nendsolid probe\n");
+            File.WriteAllText(jsonProbe, "{\"probe\":true}\n");
+
+            try
+            {
+                var pending = GoldenGuard.FindPendingGoldens(results);
+
+                Assert.That(pending, Does.Contain(stlProbe));
+                Assert.That(pending, Does.Contain(jsonProbe));
+            }
+            finally
+            {
+                File.Delete(stlProbe);
+                File.Delete(jsonProbe);
             }
         }
 
