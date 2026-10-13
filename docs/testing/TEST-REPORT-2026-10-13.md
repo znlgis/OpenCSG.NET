@@ -59,3 +59,34 @@ Spec：`docs/superpowers/specs/2026-10-13-comprehensive-testing-design.md`
 - `CsgMesh.cs:49-51` 的声称（100mm 立方体：有向体积 +1,000,000 → 仅交换后 −1,000,000 → 反转绕序后回到 +1,000,000）**首次由测试验证为真**，STL 导出绕序方向正确。
 - 套件结果：108 通过 / 0 失败 / 0 跳过（基线 102 + 新增 6）。
 - 缺陷：无新增（`tests/DEFECTS.md` 未变更，仍为空表）。
+
+## 阶段 1 — HLR 管线首次打通
+
+`ViewBridge` 让 `Solid → CsgMesh → ViewProjector → OrthographicViews` 在库内首次可达。
+
+| 视图 | 立方体边长 10 的 bounds | 是否符合解析解 |
+| --- | --- | --- |
+| 主视 | 10 × 10（X=[−5,5] Y=[−5,5]） | 是 |
+| 俯视 | 10 × 10（X=[−5,5] Y=[−5,5]） | 是 |
+| 左视 | 10 × 10（X=[−5,5] Y=[−5,5]） | 是 |
+
+剖分与线段：立方体网格 12 个三角形；三视图各输出 4 条线段，全部判定可见（可见 4 / 隐藏 0 / 还原圆弧 0）。
+凸体外轮廓的正交视图没有遮挡 —— `ViewProjector` 在候选阶段就丢弃「两面皆背对相机」的边
+（`ViewProjector.cs:86-87`），故隐藏段数为 0 是算法设计口径，非丢线。
+
+### 坐标约定链（`Box10x20x30_ViewExtentsFollowAxisMapping`）
+
+CSG 尺寸 (X=10, Y=20, Z=30) → `CsgMesh` 做 Y↔Z 后网格包围盒 X=[−5,5] Y=[−15,15] Z=[−10,10]，
+实测三视图与按 `ViewProjectorContracts.cs:88-102` 取轴定义的手推导**逐位相符**（误差 0，容差 1e-9 未动用）：
+
+| 视图 | 取轴（网格坐标） | 期望 W×H | 实测 W×H | 实测 MinX/MaxX/MinY/MaxY |
+| --- | --- | --- | --- | --- |
+| 主视 | Right=−Y_mesh, Up=+Z_mesh | 30 × 20 | 30 × 20 | −15/15, −10/10 |
+| 俯视 | Right=−Y_mesh, Up=+X_mesh | 30 × 10 | 30 × 10 | −15/15, −5/5 |
+| 左视 | Right=−X_mesh, Up=+Z_mesh | 10 × 20 | 10 × 20 | −5/5, −10/10 |
+
+三个方向的 `Right × Up == −Look` 不变量均在实测中成立（无镜像）。
+
+- 新增用例：`tests/OpenCSG.NET.Tests/Views/ViewBridgeTest.cs`（5 个用例，全过）。
+- 套件结果：115 通过 / 0 失败 / 0 跳过（本次基线 110 + 新增 5）。
+- 缺陷：无新增（`tests/DEFECTS.md` 未变更，仍为空表）—— 手推导与实现一致，无「文档 vs 实现」冲突。
