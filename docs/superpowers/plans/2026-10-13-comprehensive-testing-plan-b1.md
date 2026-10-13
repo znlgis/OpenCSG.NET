@@ -3520,6 +3520,8 @@ git commit -m "test: Tier 2 解析解属性测试与独立凸包 oracle"
 
 ### Task 10: Tier 3 —— HlrAssert + 结构/单调/幂等属性测试 + 收口
 
+> **执行时修正（2026-10-13，已实测校准）**：本段落的原始代码有 4 处被探针打脸的算法/口径 —— `MergeConcyclic_IsIdempotent` 的固定输入实测产出 0 条弧（空洞用例）、`AssertCleanPreservesCoverage` 的阈值公式与 1e-6 覆盖容差（实测 72 处假警报）、`AssertFitCoversInput` 的统一弧距口径（实测 20/32 种子失败，真实契约为顶点 ≤ tolerance / 弦中点 ≤ max(tolerance, 5%R)）、`AssertVisibilityAccounting` 的恒真对拍。实际执行以 `.superpowers/sdd/2026-10-13-comprehensive-testing-plan-b1/task-10-brief.md` 的 C1–C6 修正版为准；最终 `HlrAssert.cs` / `Tier3StructureTest.cs` 与简报一致（用例 200，见完成定义）。本段下文保留为历史记录，勿照抄。
+
 **Files:**
 - Create: `tests/OpenCSG.NET.TestKit/Oracles/HlrAssert.cs`
 - Create: `tests/OpenCSG.NET.SystemTests/Property/Tier3StructureTest.cs`
@@ -4038,16 +4040,20 @@ git commit -m "test: Tier 3 结构不变量属性测试与 HLR oracle 收口"
 
 ## 完成定义（Plan B1）
 
-- [ ] `dotnet build OpenCSG.NET.slnx -c Release` 成功，0 警告 0 错误（含新工程与 samples/perf）
-- [ ] `dotnet test tests/OpenCSG.NET.Tests/...` = 126 通过 / 0 失败 / 1 跳过（`[Explicit]` 的 DEFECT-001）
-- [ ] `dotnet test tests/OpenCSG.NET.SystemTests/...` 全绿、0 失败
-- [ ] `tests/OpenCSG.NET.TestKit/Generation/corpus.json` 已提交，且重建**幂等**（两次生成逐字节相同）
-- [ ] TestKit 目录已按 spec §4 落位（`Generation/` `Oracles/` `Bridge/` `Io/` `Infrastructure/`），`GeometryAssert` 等的命名空间仍为 `Csg.Test`，现有测试文件断言逻辑零改动
-- [ ] `GoldenPaths.ResultsDirectory` 的标记文件名已参数化，`GoldenGuardTest` 增补的参数化用例通过
-- [ ] `TessellationScope` 有 3 个用例（含异常路径复位）；`DEFECT-001` 已登记且其 `[Explicit]` 用例默认被跳过
-- [ ] Tier 1（含 Tier 1 续的六族：变换等价/包围盒/序列化往返/相等契约/平面分割/NaN 校验）、Tier 2、Tier 3 的用例数与实测通过数已写入 `TEST-REPORT`，无占位符
-- [ ] 时间预算结论已记录；若超预算，说明移动了哪些用例到 nightly
-- [ ] 所有发现的缺陷已登记 `DEFECTS.md` 并给出最小复现；**`src/` 零改动**
+**状态：已全部完成（2026-10-13，分支 `test/comprehensive-suite-plan-b1`，末 commit `341b218`）。** 逐项核对：
+
+- [x] `dotnet build OpenCSG.NET.slnx -c Release` 成功，0 警告 0 错误（含新工程与 samples/perf）
+- [x] `dotnet test tests/OpenCSG.NET.Tests/...` = **129** 通过 / 0 失败 / 1 跳过（`[Explicit]` 的 DEFECT-001；原文的 126 系陈旧计数）
+- [x] `dotnet test tests/OpenCSG.NET.SystemTests/...` 全绿、0 失败 = **1033 通过 / 0 失败 / 101 NotExecuted（`[Explicit]`，总 1134）**
+- [x] `tests/OpenCSG.NET.TestKit/Generation/corpus.json` 已提交，且重建**幂等**（两次生成逐字节相同）
+- [x] TestKit 目录已按 spec §4 落位（`Generation/` `Oracles/` `Bridge/` `Io/` `Infrastructure/`），`GeometryAssert` 等的命名空间仍为 `Csg.Test`，现有测试文件断言逻辑零改动
+- [x] `GoldenPaths.ResultsDirectory` 的标记文件名已参数化，`GoldenGuardTest` 增补的参数化用例通过
+- [x] `TessellationScope` 有 3 个用例（含异常路径复位）；`DEFECT-001` 已登记且其 `[Explicit]` 用例默认被跳过
+- [x] Tier 1（含 Tier 1 续的六族：变换等价/包围盒/序列化往返/相等契约/平面分割/NaN 校验）、Tier 2、Tier 3 的用例数与实测通过数已写入 `TEST-REPORT`，无占位符
+- [x] 时间预算结论已记录（Smoke 墙钟 ~8s、全套件 ~8–11s，远低于 spec §7 的 8 分钟上限；无需移入 nightly）
+- [x] 所有发现的缺陷已登记 `DEFECTS.md` 并给出最小复现（DEFECT-001/002/003/004）；**`src/` 零改动**
+
+> 逐任务的评审/fix round/复审记录见 `.superpowers/sdd/2026-10-13-comprehensive-testing-plan-b1/progress.md`（含 Task 10 简报 C1–C6 对计划文本 4 处算法错误的修正与实测校准）。
 
 ## 后续计划（不在本计划范围）
 
