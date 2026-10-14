@@ -1,0 +1,95 @@
+using System;
+using Csg;
+using NUnit.Framework;
+
+namespace Csg.Test
+{
+    /// <summary>
+    /// L6 复杂度基线的**测试侧复核**（Plan E / Task 1.3 与 1.4 的第三、六条）：
+    /// 与 <c>perf/OpenCSG.NET.PerfTest --complexity</c> **同源输入**（<see cref="PerfWorkloads"/>），
+    /// 预算 = 实测 × 5（工具侧 ×4），实测值写在常量注释与断言消息里。
+    /// <para>
+    /// 计时协议见 <see cref="BudgetClock"/>（采样 min）；比值口径同样用 min/min
+    /// （单次采样的中位数会被堆状态/机器状态抬高 1.4–2×，比值会从 ≈17 漂到 ≈25）。
+    /// </para>
+    /// </summary>
+    [TestFixture]
+    [Category("Perf")]
+    public class ComplexityBudgetTest
+    {
+        // ── Clean n=5k/20k ──────────────────────────────────────────────────
+
+        /// <summary>Clean n=5000 预算（ms）：实测基准 33.0ms × 5。</summary>
+        const double CleanBudget5kMs = 165.0;
+
+        /// <summary>Clean n=20000 预算（ms）：实测基准 674.1ms × 5。</summary>
+        const double CleanBudget20kMs = 3370.5;
+
+        [Test]
+        public void Clean_LargeInput_BudgetAndQuadraticGuard()
+        {
+            var segments5k = PerfWorkloads.Segments(5000);
+            var segments20k = PerfWorkloads.Segments(20000);
+            var bounds5k = ViewSegGen.BoundsOf(segments5k);
+            var bounds20k = ViewSegGen.BoundsOf(segments20k);
+
+            // 非空转守卫：结果段数实测 2150（5k）/ 8831（20k）—— 输入构造失效时会整体空转。
+            var result5k = ViewSegmentCleanup.Clean(segments5k, bounds5k);
+            var result20k = ViewSegmentCleanup.Clean(segments20k, bounds20k);
+            Assert.That(result5k.Count, Is.EqualTo(2150), $"Clean(5k) 输出段数实测 {result5k.Count}（钉值 2150）");
+            Assert.That(result20k.Count, Is.EqualTo(8831), $"Clean(20k) 输出段数实测 {result20k.Count}（钉值 8831）");
+
+            var measured5k = BudgetClock.MinMs(3, 1, () => ViewSegmentCleanup.Clean(segments5k, bounds5k));
+            var measured20k = BudgetClock.MinMs(3, 1, () => ViewSegmentCleanup.Clean(segments20k, bounds20k));
+            TestContext.Progress.WriteLine(
+                $"[Perf] Clean 5k={measured5k:F1}ms/{CleanBudget5kMs:F1}ms，20k={measured20k:F1}ms/{CleanBudget20kMs:F1}ms，"
+                + $"比值 {measured20k / measured5k:F2}");
+
+            BudgetClock.AssertWithinBudget("Clean n=5000", measured5k, CleanBudget5kMs,
+                "3 采样 × 1 次调用，取 min", "33.0ms（工具 --complexity 实测 min，2026-10-14）");
+            BudgetClock.AssertWithinBudget("Clean n=20000", measured20k, CleanBudget20kMs,
+                "3 采样 × 1 次调用，取 min", "674.1ms（探针同协议实测中位数；工具侧 min 567.0ms）");
+
+            // O(n²) 判定：理论 20k/5k ≈ 16×（Clean 的折叠步骤按对比较），实测 17.0–17.6（同机同输入）。
+            // <32 是**宽界**：抓「忽然多项式升级」（n^2.5 级会到 ≈90），不是 1.5× 级抖动。
+            var ratio = measured20k / measured5k;
+            Assert.That(ratio, Is.LessThan(32.0),
+                $"Clean 20k/5k 耗时比实测 {ratio:F2}（min/min；理论 O(n²) ≈16，实测正常域 17.0–17.6）"
+                + "—— 达到 32 意味着出现多项式升级或输入规模漂移，须排查（不得放宽上限）");
+        }
+
+        // ── Project 900² 栅格 ───────────────────────────────────────────────
+
+        /// <summary>Project 5000 三角形预算（ms）：实测基准 214.7ms × 5。</summary>
+        const double ProjectBudget5kMs = 1073.5;
+
+        /// <summary>Project 20000 三角形预算（ms）：实测基准 961.9ms × 5。</summary>
+        const double ProjectBudget20kMs = 4809.5;
+
+        [Test]
+        public void Project_DepthRaster900_Budget()
+        {
+            // 圆柱长 900 / 直径 900 ⇒ 三视图屏面跨度均 ≈900mm ⇒ DepthRaster ≈ 900×900/视图
+            // （900² × 3 视图 = 2700 格列；RasterResolution=900 为库常量，见 ViewProjector）。
+            var mesh5k = PerfWorkloads.ProjectMesh(PerfWorkloads.ProjectSmallTriangles);
+            var mesh20k = PerfWorkloads.ProjectMesh(PerfWorkloads.ProjectLargeTriangles);
+
+            // 非空转守卫：三视图输出段数/弧数实测（5k: 123/0/123 段、0/1/0 弧；20k: 226/0/226、0/1/0）。
+            var views5k = new ViewProjector(mesh5k).Project();
+            Assert.That(views5k.Count, Is.EqualTo(3), "三视图数量");
+            Assert.That(views5k[0].Segments.Count + views5k[1].Segments.Count + views5k[2].Segments.Count,
+                Is.EqualTo(246), "5k 网格三视图总段数实测 246（钉值）");
+            Assert.That(views5k[1].Arcs.Count, Is.EqualTo(1), "5k 网格俯视 1 条弧（轴向视图，钉值）");
+
+            var measured5k = BudgetClock.MinMs(3, 1, () => new ViewProjector(mesh5k).Project());
+            var measured20k = BudgetClock.MinMs(3, 1, () => new ViewProjector(mesh20k).Project());
+            TestContext.Progress.WriteLine(
+                $"[Perf] Project 5k={measured5k:F1}ms/{ProjectBudget5kMs:F1}ms，20k={measured20k:F1}ms/{ProjectBudget20kMs:F1}ms");
+
+            BudgetClock.AssertWithinBudget("Project 5000 三角形（三视图 900² 栅格）", measured5k, ProjectBudget5kMs,
+                "3 采样 × 1 次 Project（含拓扑焊接），取 min", "214.7ms（工具 --complexity 实测 min，2026-10-14）");
+            BudgetClock.AssertWithinBudget("Project 20000 三角形（三视图 900² 栅格）", measured20k, ProjectBudget20kMs,
+                "3 采样 × 1 次 Project（含拓扑焊接），取 min", "961.9ms（工具 --complexity 实测 min，2026-10-14）");
+        }
+    }
+}

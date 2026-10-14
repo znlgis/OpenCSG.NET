@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "env": {
+    "machine": "LK-PC",
+    "os": "Microsoft Windows 10.0.26300",
+    "framework": ".NET 8.0.31",
+    "processors": 24,
+    "generatedAt": "2026-10-14 00:27:11 UTC"
+  },
+  "items": [
+    {
+      "op": "Union",
+      "medianMs": 66.899,
+      "minMs": 56.259,
+      "bytes": 136388512,
+      "repeats": 15
+    },
+    {
+      "op": "Intersect",
+      "medianMs": 27.898,
+      "minMs": 25.608,
+      "bytes": 69934400,
+      "repeats": 15
+    },
+    {
+      "op": "Evaluate",
+      "medianMs": 27.729,
+      "minMs": 26.574,
+      "bytes": 68943336,
+      "repeats": 15
+    },
+    {
+      "op": "ToJson",
+      "medianMs": 41.216,
+      "minMs": 16.748,
+      "bytes": 5131720,
+      "repeats": 15
+    },
+    {
+      "op": "FromJson",
+      "medianMs": 16.913,
+      "minMs": 16.116,
+      "bytes": 4787080,
+      "repeats": 15
+    },
+    {
+      "op": "TrianglesOf",
+      "medianMs": 6.335,
+      "minMs": 5.165,
+      "bytes": 29503640,
+      "repeats": 15
+    },
+    {
+      "op": "WriteAscii",
+      "medianMs": 61.43,
+      "minMs": 50.18,
+      "bytes": 8196968,
+      "repeats": 15
+    },
+    {
+      "op": "WriteBinary",
+      "medianMs": 114.774,
+      "minMs": 97.86,
+      "bytes": 93208,
+      "repeats": 15
+    },
+    {
+      "op": "Project",
+      "medianMs": 148.95,
+      "minMs": 111.095,
+      "bytes": 48723824,
+      "repeats": 15
+    },
+    {
+      "op": "Fit",
+      "medianMs": 33.809,
+      "minMs": 31.364,
+      "bytes": 35751440,
+      "repeats": 15
+    },
+    {
+      "op": "Clean",
+      "medianMs": 332.884,
+      "minMs": 327.451,
+      "bytes": 3017560,
+      "repeats": 15
+    }
+  ]
+}

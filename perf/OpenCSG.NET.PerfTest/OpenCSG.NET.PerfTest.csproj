@@ -3,10 +3,18 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <!-- 刻意**保持**默认分层编译 + 动态 PGO（不关）：生产里库就是在该配置下跑，实测关闭后
+         动态 PGO 一并失效、Clean 20k 的中位数从 ~605ms 涨到 ~1830ms（PGO 对热循环 3× 量级），
+         基线就失真了。抖动改由预热 3 轮 + 取中位数压（见 PerfSuite.Measure）。 -->
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\OpenCSG.NET\OpenCSG.NET.csproj" />
+    <!-- Plan E：基准/复杂度/边界预算的输入集（PerfWorkloads）与 SystemTests 的 Perf 用例同源。
+         TestKit 是 test-side 基础设施（IsPackable=false、仅 nunit 依赖），引用它不会把测试依赖带进 src/。
+         备选（在 perf 里复刻最小输入构造）会与 TestKit 生成器静默漂移，预算「实测×倍数」失去同源含义。 -->
+    <ProjectReference Include="..\..\tests\OpenCSG.NET.TestKit\OpenCSG.NET.TestKit.csproj" />
   </ItemGroup>
 
   <ItemGroup>
