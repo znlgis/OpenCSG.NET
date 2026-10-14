@@ -1,5 +1,8 @@
-# Continuous integration: build the core library and run the test suite on
-# every push and pull request targeting main.
+# CI：全量构建 + 双 TFM 双平台测试 + 覆盖率门禁。
+# Plan F / Task 3，按 spec 2026-10-13-comprehensive-testing-design §8.2 八条重写。
+# 8.2 条目 1（setup-dotnet 9.0.x）与条目 3（测试项目 net10 TFM）冲突的裁定：
+# SDK 统一 10.0.x（与 global.json 钉的 10.0.4xx、rollForward latestFeature 一致），
+# 另装 8.0.x 供 net8.0 测试目标与 net8.0 的 perf 工具运行。
 name: CI
 
 on:
@@ -15,21 +18,82 @@ permissions:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os }}
+    strategy:
+      # 两个平台都要出各自的结论（尤其 windows 首次跑要观察换行与路径机制），
+      # 一个平台失败不允许取消另一个。
+      fail-fast: false
+      matrix:
+        # 双平台（spec §8.2 条目 2）：golden 机制依赖 Environment.NewLine 与
+        # 4 层路径推导，此前只在 ubuntu 验证过；Results/**/*.json 已由
+        # .gitattributes 固定 eol=lf（入库/检出逐字节一致），STL 字节级基线
+        # 依赖 Windows 的 Environment.NewLine（windows 检出 autocrlf=true ⇒ CRLF，
+        # 与 Windows 下的 STL 输出一致）。
+        # 若某个平台因换行机制转红 ⇒ 那是**真发现**：先调查取证并在
+        # tests/DEFECTS.md 登记，不得直接把该平台从矩阵删除。
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup .NET
+      - name: Setup .NET (SDK 10.0.x + 8.0.x runtime)
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          # 多行 = 多版本装进同一 DOTNET_ROOT（setup-dotnet 的文档化用法）：
+          #   10.0.x —— SDK：global.json 钉 10.0.4xx（rollForward latestFeature）
+          #             只认 10.0 系列；SDK 10 自带 10.0 运行时，跑 net10.0 测试目标。
+          #   8.0.x  —— setup-dotnet 只装 SDK，而 SDK 8.0.x 内含 8.0 运行时：
+          #             net8.0 测试目标与 perf/OpenCSG.NET.PerfTest（net8.0）都要它。
+          dotnet-version: |
+            10.0.x
+            8.0.x
 
-      # Build the core library in Release. TreatWarningsAsErrors is enabled in
-      # the csproj, so any new warning fails the build.
-      - name: Build
-        run: dotnet build src/OpenCSG.NET/OpenCSG.NET.csproj -c Release
+      # 全解决方案构建（spec §8.2 条目 1 + 条目 6）：src + 两个测试工程 + TestKit +
+      # ApiCompat（netstandard2.0 消费面，编译型金丝雀）+ samples + perf + tools。
+      # 旧 CI 只 build src/OpenCSG.NET ⇒ samples/perf 的公共 API 破坏不可见。
+      # 产品工程开了 TreatWarningsAsErrors，任何新警告即失败。
+      - name: Build (full solution)
+        run: dotnet build OpenCSG.NET.slnx -c Release
 
-      # Run the test suite. The test project transitively compiles the core
-      # library via ProjectReference.
-      - name: Test
-        run: dotnet test tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj -c Release
+      # 条目 8：Tests 工程**不加任何 --filter**，全量运行。两条独立理由：
+      #   1) NUnit3TestAdapter 4.4.2 把 [SetUpFixture] 的 OneTimeTearDown 失败记为
+      #      fixture 级错误 —— 不计入用例数、不影响退出码。实测 --filter 下单独跑
+      #      GoldenGuard 一类仍报通过、退出码 0；真正让运行变红的是它的伴随用例
+      #      GoldenGuardTest.FindPendingGoldens_OnCleanTree_IsEmpty。
+      #   2) --filter 会连带执行标为 [Explicit] 的豁免用例（Plan F / Task 1 在
+      #      SystemTests 上实测：--filter 下 98 个 Explicit 种子被执行并失败，
+      #      而全量运行正确跳过）。TRX 逐结果计数（Task 1/Task 3 实测，全量口径）：
+      #      Tests NotExecuted=8、SystemTests NotExecuted=160。
+      # 不指定 -f ⇒ 依次跑 net8.0 与 net10.0 两个 TFM（Task 1 实测两 TFM 各 342/0；
+      # Task 2 回填 3 个 Tessellation 用例后为 345/0；golden 共享同一个
+      # tests/OpenCSG.NET.Tests/Results 目录，两边皆绿）。
+      # 本地快速档：dotnet test tests/OpenCSG.NET.Tests -c Release -f net8.0。
+      - name: Test (OpenCSG.NET.Tests, unfiltered, dual TFM)
+        run: dotnet test tests/OpenCSG.NET.Tests -c Release
+
+      # 与上一步同口径的全量运行（不筛选、双 TFM），含 [Category("Perf")] 六个
+      # 墙钟预算用例（未插桩口径；本地实测 6/6 绿）。覆盖率门禁会另行排除它们，
+      # 归因见 tools/coverage-gate.py 的 SUITES 注释。
+      - name: Test (OpenCSG.NET.SystemTests, unfiltered, dual TFM)
+        run: dotnet test tests/OpenCSG.NET.SystemTests -c Release
+
+      # 条目 5：覆盖率收集 + 阈值门禁（spec §8.1：src/ 行覆盖 ≥ 85%，五个分组 ≥ 90%）。
+      # 脚本自跑两个套件（内部 -f net8.0：src/ 是 netstandard2.0 单一产物形态，
+      # 两 TFM 行集合一致，口径理由见脚本头注释），并集解析 cobertura 后判定；
+      # 套件红 / 报告缺失 / 解析失败一律 fail-closed（绝不放行）。
+      # 托管镜像自带 python（ubuntu 有 /usr/bin/python 与 python3；windows 有
+      # python），脚本只用标准库。
+      - name: Coverage gate
+        run: python tools/coverage-gate.py
+
+      # 条目 5（续）：cobertura 工件上传；门禁失败也上传（if: always()）便于定位。
+      # 本地对照数字（Task 2 实测）：src/ 98.43%（2942/2989），五组最低 98.25%；
+      # CI 首跑的官方数字以本工件为准。
+      - name: Upload coverage (cobertura)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}
+          path: artifacts/coverage-gate/**/coverage.cobertura.xml
+          if-no-files-found: warn

@@ -1,0 +1,103 @@
+# Nightly（Plan F / Task 3；spec §8.2 条目 4）：独立于 ci.yml 的定时/手动工作流，
+# 承载两类「不该阻塞 PR」的检查：
+#   (a) Long 档模糊：放大 OPENCSG_FUZZ_CASES 后全量 SystemTests；
+#   (b) perf 回归门禁：25%（×1.25）同机同日口径（Plan E 工具，基线 perf/baseline.json）。
+# 独立工作流 = PR 只触发 ci.yml ⇒ 本工作流任何结果都不阻塞 PR。
+# 触发：每天 UTC 18:30（北京 02:30，避开整点高峰）；workflow_dispatch 手动补跑。
+name: Nightly
+
+on:
+  schedule:
+    - cron: '30 18 * * *'
+  workflow_dispatch:
+
+# 与 ci.yml 同口径：只需要读仓库，不回写。
+permissions:
+  contents: read
+
+jobs:
+  long-fuzz:
+    name: Long fuzz + full SystemTests
+    runs-on: ubuntu-latest
+    env:
+      # Long 档规模（TestKit：Corpus.LongCaseCount() 读本环境变量，缺省 5000，
+      # 经 int.TryParse 解析、非法或非正数回退缺省）。此处 4× 默认值放大；
+      # spec §7 给 Long 档的墙钟预算为 ≤ 40 分钟。
+      # 注：Long 档条目（LongCaseCount/LongSeed）由 TestKit 提供，当前测试面尚无
+      # 循环消费它的用例 —— 本 job 现阶段实际是全量 SystemTests 的 nightly 复跑；
+      # env 入口与 nightly 触发按 spec 就位，供后续 Long 消费方接入。
+      OPENCSG_FUZZ_CASES: '20000'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET (SDK 10.0.x + 8.0.x runtime)
+        uses: actions/setup-dotnet@v4
+        with:
+          # 与 ci.yml 相同：10.0.x 为 SDK（global.json 10.0.4xx），8.0.x 提供
+          # net8.0 测试目标需要的 8.0 运行时。
+          dotnet-version: |
+            10.0.x
+            8.0.x
+
+      - name: Build (full solution)
+        run: dotnet build OpenCSG.NET.slnx -c Release
+
+      # 与 ci.yml 同款全量口径（不筛选、双 TFM，不指定 -f ⇒ net8.0 与 net10.0
+      # 依次执行），另加 TRX：console 输出不计 NotExecuted，TRX 才是计数权威
+      # （Task 1 / 基线口径 1109/0/160 均以 TRX 为准）。
+      # 读 TRX 时注意：VSTest 的 <Counters notExecuted> 属性实测恒为 0，
+      # 权威口径 = UnitTestResult 的 outcome 逐结果统计（Task 3 本地复现：
+      # 两 TFM 均 Passed=1109 / NotExecuted=160 / Failed=0）。
+      - name: Full SystemTests (Long amplitude)
+        run: dotnet test tests/OpenCSG.NET.SystemTests -c Release --logger trx --results-directory artifacts/nightly/systemtests
+
+      - name: Upload logs (TRX)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-long-fuzz
+          path: artifacts/nightly/**
+          if-no-files-found: warn
+
+  perf-gate:
+    name: Perf gate (25% regression vs baseline)
+    # 基线 perf/baseline.json 录制于 Windows（env.os = Microsoft Windows ...），
+    # 门禁是「同机同日」口径 ⇒ 选 windows-latest 保持 OS 族一致，减少环境差异。
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET (SDK 10.0.x + 8.0.x runtime)
+        uses: actions/setup-dotnet@v4
+        with:
+          # perf/OpenCSG.NET.PerfTest 是 net8.0（工具引用 TestKit 与 src），
+          # 需要 8.0 运行时；10.0.x 与仓库 global.json 一致（dotnet run 也受其约束）。
+          dotnet-version: |
+            10.0.x
+            8.0.x
+
+      # 机噪协议（与 perf/OpenCSG.NET.PerfTest 头注释和 Plan E 报告一致）：
+      #   * 25% 阈值只对**同机同日**对比有意义；nightly runner ≠ 录制基线的机器，
+      #     首次跑出的差值先按「机器指纹」看待，不当作回归；
+      #   * 超阈（exit 1）时：① 在 nightly runner 上原样重跑确认；② 检查后台负载
+      #     与电源策略；③ 确认是环境噪声 ⇒ 记录环境信息，不按回归处理（本工作流
+      #     与 ci.yml 分离，任何结果都不阻塞 PR）；
+      #   * 只有同机复现的稳定劣化才按回归处理；若确认 runner 相对基线长期系统性
+      #     偏移，可在 runner 上重生成基线：
+      #       dotnet run --project perf/OpenCSG.NET.PerfTest -c Release -- --write-baseline perf/baseline.json
+      #     —— 重生成必须提交 diff 并在 PR 里说明原因，禁止只为让门禁变绿而重生成。
+      # shell: bash = Git Bash（tee + pipefail；GitHub 的 bash 默认带 -eo pipefail），
+      # 门禁非零 ⇒ 整个管道非零 ⇒ 本步失败，同时日志落盘供工件上传。
+      - name: Perf gate
+        shell: bash
+        run: |
+          mkdir -p artifacts/nightly
+          dotnet run --project perf/OpenCSG.NET.PerfTest -c Release -- --gate perf/baseline.json 2>&1 | tee artifacts/nightly/perf-gate.log
+
+      - name: Upload perf gate log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-perf-gate
+          path: artifacts/nightly/**
+          if-no-files-found: warn
