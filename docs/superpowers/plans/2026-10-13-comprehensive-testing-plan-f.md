@@ -33,7 +33,7 @@
 1. `global.json`：钉 **10.0.4xx**（`rollForward: latestFeature`）。**spec 8.2 条目 1（9.0.x）与条目 3（net10 TFM）冲突的裁定**：构建 net10.0 目标需要 SDK 10 ⇒ SDK 与 CI 的 setup-dotnet 统一到 10.0.x；CI 另装 8.0.x 运行时跑 net8 测试。报告写明此裁定。
 2. `tests/Directory.Build.props`：`Nullable=enable`、`LangVersion` 与主工程一致；`TreatWarningsAsErrors` **先测后定**（先出警告普查：若 ≤ 少量可修 ⇒ 开启并修净；若洪泛 ⇒ 报告数字并以 `Nullable` 单独先行）。
 3. 两个测试项目 `<TargetFrameworks>net8.0;net10.0</TargetFrameworks>`：**两 TFM 各跑全量**（Tests + SystemTests；perf/publication/`Results` 路径两 TFM 共用 ⇒ golden 比对必须两边都绿）。net10 上若出现行为差异 ⇒ 登记缺陷（CrossRuntime 工具已证哈希一致，但测试面更广）。本地默认全跑会翻倍时长——文档说明 `-f net8.0` 快速档。
-4. 验证：`dotnet build OpenCSG.NET.slnx -c Release` 0/0；`dotnet test tests/OpenCSG.NET.Tests -c Release`（两 TFM 各 342/0）；`dotnet test tests/OpenCSG.NET.SystemTests -c Release`（两 TFM 各 1109/0）；`Results/` 零残留。
+4. 验证：`dotnet build OpenCSG.NET.slnx -c Release` 0/0；`dotnet test tests/OpenCSG.NET.Tests -c Release`（两 TFM 各 342/0；F2 的 Tessellation 回填 +3 ⇒ 终值 345，见 TEST-REPORT 勘误）；`dotnet test tests/OpenCSG.NET.SystemTests -c Release`（两 TFM 各 1109/0）；`Results/` 零残留。
 
 ### Task 2: 覆盖率门禁
 
@@ -86,4 +86,7 @@
 - [x] `ci.yml` 满足 8.2 全部 8 条（含 GoldenGuardTest 不过滤、windows 矩阵、slnx 全构建、ApiCompat 编译）；`nightly.yml` 就绪。 ——实测：YAML 语法校验通过；每条 `run:` 命令在 scratch 副本本地等价真跑通过（GitHub Actions 本体不可本地运行，边界已声明；Long 档无消费用例已如实登记）。
 - [x] ApiCompat 五类缺口补齐；PublicApiAnalyzers 记为未批准后续项。 ——实测：`ApiSurface.cs` +163 行（4 个 Touch 方法 + 1 个嵌套转换器）；单工程与 slnx 全量编译 0/0；命名负控 CS0246 按预期红；PublicApiAnalyzers 未动 `src/`、仅登记。
 - [x] TEST-REPORT 定稿（零占位符、已知限制六项、覆盖率实际数字）；spec §13 Plan F 勾选。 ——实测：`grep 填实际` 零匹配；终稿含逐计划用例数终审（TRX 权威口径、342→345 勘误一行）、覆盖率前后对照与实际命令、「已知限制」六项；spec §8.2 八条与 §13 Plan F 四条已勾选（见 spec 文件）。
-- [x] 全量终验全绿；`src/` 除构建配置外的零改动保持。 ——实测：build 0/0；Tests 345/0、SystemTests 1109/0（双 TFM；TRX total=353 / 1269，逐结果 NotExecuted×8 / ×160）；coverage gate exit 0；perf gate exit 0；CrossRuntime 双 TFM 哈希一致（`97f2f11d…def75`）；`Results/` 残留 0（60 STL + 15 JSON 常备资产在册）；`src/` 零改动（Plan F 全程 git diff 实证）。
+- [x] 全量终验全绿；`src/` 除构建配置外的零改动保持。
+
+> 全分支终审（2026-10-14）：**With fixes** → 唯一必改为「13 工程→10 工程（13 产物行）」文档勘误（已修）；无 Critical/Important。
+> 终审记录的两项首跑观察项与一项后续项：① CI 首跑须观察 6 个 wall-clock 预算用例在 2–4 vCPU runner 上的表现（本机评审会话中 perf 门禁因负载 4/4 未复现绿——已属文档化的噪声域）；② windows 腿依赖 runner 的 core.autocrlf 默认（15 条字节级 STL 基线）；③ Long 档消费方未接线（`OPENCSG_FUZZ_CASES` 读取但无消费者）——登记为后续项。 ——实测：build 0/0；Tests 345/0、SystemTests 1109/0（双 TFM；TRX total=353 / 1269，逐结果 NotExecuted×8 / ×160）；coverage gate exit 0；perf gate exit 0；CrossRuntime 双 TFM 哈希一致（`97f2f11d…def75`）；`Results/` 残留 0（60 STL + 15 JSON 常备资产在册）；`src/` 零改动（Plan F 全程 git diff 实证）。

@@ -234,7 +234,7 @@ sample 是顶层语句 console app，几何代码无法被测试项目引用。L
 ### 8.2 CI 改动（已批准）
 
 1. `ci.yml`：`setup-dotnet` `8.0.x` → `9.0.x`，并把 `dotnet build OpenCSG.NET.slnx` 加入 —— 现有 CI **从不编译 samples/perf**，公共 API 破坏不会被发现
-   > ✅ 已落地（Plan F，2026-10-14）：ci.yml 全构建步骤 = `dotnet build OpenCSG.NET.slnx -c Release`（13 工程全被编译：src/ApiCompat/samples/perf/tools；本地等价实测 0 警告 0 错误）。`setup-dotnet` 多行 `10.0.x` + `8.0.x` —— 本条的 `9.0.x` 与条目 3（net10 TFM）冲突，裁定统一 **10.0.x**（见条目 7）。
+   > ✅ 已落地（Plan F，2026-10-14）：ci.yml 全构建步骤 = `dotnet build OpenCSG.NET.slnx -c Release`（10 工程（13 个产物行；Tests/SystemTests/CrossRuntime 各双 TFM）全被编译：src/ApiCompat/samples/perf/tools；本地等价实测 0 警告 0 错误）。`setup-dotnet` 多行 `10.0.x` + `8.0.x` —— 本条的 `9.0.x` 与条目 3（net10 TFM）冲突，裁定统一 **10.0.x**（见条目 7）。
 2. 矩阵加 `windows-latest`（golden 机制依赖 `Environment.NewLine` 与 4 层路径推导，只在 ubuntu 验证过）
    > ✅ 已落地：`os: [ubuntu-latest, windows-latest]`（`fail-fast: false`；注释含「某平台因换行机制转红 = 真发现，先调查取证并登记，不得静默删平台」纪律）。GitHub Actions 矩阵本体不可本地运行——两平台 golden 机制的本地等价验证（含 CRLF/LF 判别力探针）与首跑观察项见 TEST-REPORT「Plan F」节与「已知限制」⑥。
 3. 测试项目多目标 `net8.0;net10.0`
@@ -244,7 +244,7 @@ sample 是顶层语句 console app，几何代码无法被测试项目引用。L
 5. 覆盖率收集 + 阈值门禁 + 报告上传
    > ✅ 已落地：`tests/coverage.runsettings` + `tools/coverage-gate.py`（判定口径 = 两份 cobertura 逐行并集、行计数加权；阈值 src≥85%、五组≥90%；fail-closed 退出码 0/1/2）+ cobertura 工件上传。官方对照数字（src 98.43%、`View*` 98.25%、CsgHelpers/StlWriter/CsgMesh/Tessellation 100%）已入 TEST-REPORT；判别力自证（阈值 0.999 ⇒ exit 1）与截断报告 fail-closed（exit 2）实测。数字为本地运行（命令与 CI 逐字相同），CI 首跑以 artifacts 为准。
 6. 编译 `tests/OpenCSG.NET.ApiCompat`（netstandard2.0 消费面）
-   > ✅ 已落地：由条目 1 的 slnx 全构建覆盖（ApiCompat 为 13 工程之一，编译型金丝雀）；五类命名缺口（`BoundingBox`/`BoundingSphere`/`PolygonShared`/`CsgEvaluationException`/`ViewVector`）+ `CsgSerialization` 消费侧两层钉已补齐。遗留登记：PublicApiAnalyzers + `PublicAPI.Shipped.txt` 方案需动 `src/` ⇒ 未获批准（且其盯可见 API 面，盖不住 internal `JsonReadHelpers` 的三辅助缺口）。
+   > ✅ 已落地：由条目 1 的 slnx 全构建覆盖（ApiCompat 为 10 工程之一，编译型金丝雀）；五类命名缺口（`BoundingBox`/`BoundingSphere`/`PolygonShared`/`CsgEvaluationException`/`ViewVector`）+ `CsgSerialization` 消费侧两层钉已补齐。遗留登记：PublicApiAnalyzers + `PublicAPI.Shipped.txt` 方案需动 `src/` ⇒ 未获批准（且其盯可见 API 面，盖不住 internal `JsonReadHelpers` 的三辅助缺口）。
 7. 新增 `global.json` 固定 SDK 版本 —— 仓库当前**没有** `global.json`，`dotnet` 浮动到本机最新 SDK；阶段 0 基线实测由 SDK 10.0.401 产出，而 CI 固定 8.0.x，本地与 CI 的工具链口径不一致（由阶段 0 记录暴露）
    > ✅ 已落地：`global.json` = `{ "sdk": { "version": "10.0.400", "rollForward": "latestFeature" } }`（本机解析 10.0.402；`latestFeature` 语义备注见 plan-f task-1-report）。`nuget-publish.yml` 因该钉导致的必然失败已一并修复（setup-dotnet 多行 10.0.x + 8.0.x）。
 8. **CI 必须以不筛选（或不含 `--filter` 排除 `GoldenGuardTest`）的方式运行 `tests/OpenCSG.NET.Tests`** —— 阶段 1 实测：NUnit3TestAdapter 4.4.2 把 `[SetUpFixture]` 的 `OneTimeTearDown` 失败记为 fixture 级错误，**不计入测试用例计数、不影响退出码**。因此 `GoldenGuard` 的 teardown 在 `--filter` 下单独存在时退出码为 0（已实测），真正让运行失败的是它的伴随用例 `GoldenGuardTest.FindPendingGoldens_OnCleanTree_IsEmpty`。全量运行（CI 的实际形态）安全；一旦 CI 改为按类别筛选，必须保证该用例不被排除
