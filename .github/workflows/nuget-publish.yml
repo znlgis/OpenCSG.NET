@@ -1,16 +1,30 @@
 # Publishes OpenCSG.NET to NuGet.org when a version tag (v*) is pushed.
-# Requires NUGET_API_KEY secret configured in the repository settings.
+#
+# Authentication: NuGet Trusted Publishing (OIDC) — no long-lived API key.
+#   1. nuget.org → 账号 → 受信任的发布（Trusted Publishing）→ 新建策略，填：
+#        - 存储库所有者：znlgis
+#        - 存储库：OpenCSG.NET
+#        - 工作流文件：nuget-publish.yml（只填文件名，不含 .github/workflows/ 路径）
+#        - 环境：留空（本工作流不使用 GitHub Actions environment；
+#                若将来要用环境保护，需在工作流加 environment: 并在此策略同步填写）
+#   2. GitHub 仓库 → Settings → Secrets and variables → Actions → 新建 Secret：
+#        NUGET_USER = nuget.org 用户名（profile name，不是邮箱地址）
+#
+#   流程：GitHub 颁发 OIDC 令牌 → NuGet/login 换取**临时 API 密钥（有效期 1 小时）** →
+#   dotnet nuget push。因此换取密钥的步骤必须紧挨推送（本工作流已如此排列）。
+#   参考：https://learn.microsoft.com/zh-cn/nuget/nuget-org/trusted-publishing
 name: Publish to NuGet
 
 on:
   push:
     tags: ['v*']
 
-# The publish job checks out the repo (read) and pushes the package to NuGet
-# using NUGET_API_KEY; it never writes back to the repository, so read-only
-# access to repository contents is sufficient.
+# The publish job checks out the repo (read) and exchanges its OIDC token for a
+# short-lived NuGet API key (id-token: write). It never writes back to the
+# repository, so repository contents stay read-only.
 permissions:
   contents: read
+  id-token: write # Required for OIDC trusted publishing (NuGet/login).
 
 jobs:
   publish:
@@ -48,7 +62,15 @@ jobs:
       - name: Pack
         run: dotnet pack src/OpenCSG.NET/OpenCSG.NET.csproj -c Release -o out -p:Version=${{ env.VERSION }}
 
-      # Publish the .nupkg to NuGet.org. --skip-duplicate allows re-running
-      # the workflow for the same tag without error.
+      # Exchange the GitHub OIDC token for a temporary NuGet API key
+      # (valid for 1 hour; one OIDC token can be exchanged once).
+      - name: NuGet login (OIDC → temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      # Publish the .nupkg to NuGet.org with the short-lived key.
+      # --skip-duplicate allows re-running the workflow for the same tag without error.
       - name: Push to NuGet
-        run: dotnet nuget push out/*.nupkg -k ${{ secrets.NUGET_API_KEY }} -s https://api.nuget.org/v3/index.json --skip-duplicate
+        run: dotnet nuget push out/*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
