@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Csg;
 using NUnit.Framework;
 
@@ -213,11 +215,14 @@ namespace Csg.Test
     /// （D1 已把门禁 <see cref="GoldenGuard.FindPendingGoldens"/> 与 tools/promote-goldens.sh
     /// 递归覆盖到该子目录，.gitignore 亦已含 <c>tests/**/Results/**/*_.json</c>）。
     ///
-    /// <para><b>golden 约定</b>（沿用 <c>ModuleBaselineGoldenTest</c> 的 byte-exact 辅助模式）：
+    /// <para><b>golden 约定（跨平台分层，DEFECT-011）</b>（沿用 <c>ModuleBaselineGoldenTest</c> 的
+    /// byte-exact 辅助模式）：
     /// 内容 = <c>ViewJson.Serialize(ViewBridge.ProjectViews(...))</c> 的 UTF-8 无 BOM 字节；
     /// 基线缺失 ⇒ 写 <c>&lt;Fixture&gt;.&lt;TestName&gt;_.json</c> + <c>Assert.Inconclusive</c>（门禁随后判红），
-    /// 人工用 <c>tools/promote-goldens.sh</c> 核对升级；基线存在 ⇒ <c>File.ReadAllBytes</c> 逐字节比对，
-    /// 不一致即失败。每个夹具同时断言 basics：视图数、每视图**非空**、序列化输出可被
+    /// 人工用 <c>tools/promote-goldens.sh</c> 核对升级；基线存在 ⇒ **Windows 沿用 <c>File.ReadAllBytes</c>
+    /// 逐字节指纹**（golden 按 Windows 输出冻结 = Windows-pinned），**非 Windows 走语义校验**
+    /// （跨平台 libm 的 ≤1 ULP 差会改变「R」数字文本：计数/标志精确 + 数值 1e-6，见
+    /// <see cref="FindJsonSemanticDivergence"/>）。每个夹具同时断言 basics：视图数、每视图**非空**、序列化输出可被
     /// <c>JsonDocument.Parse</c> 解析（非空口径 = <c>Segments.Count + Arcs.Count &gt; 0</c>：
     /// 简报原文写 <c>Segments.Count &gt; 0</c>，但解析几何体的**轴向视图**例外——圆柱俯视的整圈
     /// 边缘会被 <see cref="ViewArcFitter"/> 整体吸收为一条 ARC（Segments=0、Arcs=1，实测见
@@ -647,8 +652,414 @@ namespace Csg.Test
                     $"golden 基线缺失：已写 Views/{Fixture}.{testName}_.json；核对后用 tools/promote-goldens.sh 升级。");
             }
 
-            Assert.That(File.ReadAllBytes(acceptedPath), Is.EqualTo(bytes),
-                $"golden 基线与当前输出不一致：{acceptedPath}");
+            var acceptedBytes = File.ReadAllBytes(acceptedPath);
+
+            if (OperatingSystem.IsWindows())
+            {
+                // Windows：维持原有**逐字节指纹**（golden 按 Windows 输出冻结 = Windows-pinned；DEFECT-011）。
+                Assert.That(acceptedBytes, Is.EqualTo(bytes),
+                    $"golden 基线与当前输出不一致：{acceptedPath}");
+                return;
+            }
+
+            // 非 Windows（DEFECT-011）：跨平台 libm（UCRT vs glibc）的 ≤1 ULP 差经曲面/旋转几何传播后
+            // 会改变「R」格式数字文本 ⇒ 字节比对不可移植；本平台改为语义校验（计数/标志精确 + 数值 1e-6）。
+            var goldenText = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetString(acceptedBytes);
+            var semanticDivergence = FindJsonSemanticDivergence(goldenText, json);
+            Assert.That(semanticDivergence, Is.Null,
+                semanticDivergence == null
+                    ? string.Empty
+                    : $"非 Windows 语义比对失败（平台：{RuntimeInformation.OSDescription}）：{semanticDivergence}"
+                      + $"；golden 基线：{acceptedPath}。字节级指纹为 Windows-pinned（DEFECT-011），本平台走语义层。");
+        }
+
+        // ─────────────── 跨平台语义比对（DEFECT-011；非 Windows 分支） ───────────────
+
+        /// <summary>数值容差（相对与近零绝对同值）：1e-6。ULP 级漂移（~1e-16 相对）远在容差内，真实回归远超。</summary>
+        internal const double SemanticNumberTolerance = 1e-6;
+
+        /// <summary>计数/拓扑不一致的统一提示（DEFECT-011 的「响亮通道」：不静默通过）。</summary>
+        internal const string TopologyDivergenceHint =
+            "计数/拓扑不一致属 DEFECT-011 的拓扑敏感通道：非 Windows 语义层不静默通过，须人工定性（数字长度 vs 拓扑翻转）。";
+
+        /// <summary>
+        /// 非 Windows 语义比对（DEFECT-011）：逐字节指纹是 Windows-pinned（golden 按 Windows 输出冻结），
+        /// 跨平台 libm（UCRT vs glibc）的 ≤1 ULP 差经曲线拟合/投影传播会改变「R」格式数字文本，故 Linux 侧
+        /// 改为语义校验——视图数、每视图线段/圆弧计数、view/visible/closed 标志**精确相等**，
+        /// 全部数值按 1e-6 相对（近零 1e-6 绝对）容差比对。计数不一致 = 拓扑敏感，照样报分歧（不静默通过）。
+        /// 返回 null = 语义等价；否则为首个分歧的完整描述。
+        /// </summary>
+        internal static string? FindJsonSemanticDivergence(string expectedJson, string actualJson)
+        {
+            if (expectedJson == null) throw new ArgumentNullException(nameof(expectedJson));
+            if (actualJson == null) throw new ArgumentNullException(nameof(actualJson));
+
+            using var golden = TryParseJson(expectedJson, "golden", out var goldenError);
+            if (golden == null)
+                return goldenError;
+            using var current = TryParseJson(actualJson, "当前输出", out var currentError);
+            if (current == null)
+                return currentError;
+
+            var goldenViews = golden.RootElement;
+            var currentViews = current.RootElement;
+            if (goldenViews.ValueKind != JsonValueKind.Array || currentViews.ValueKind != JsonValueKind.Array)
+                return $"顶层必须是 JSON 数组：golden {goldenViews.ValueKind} / 当前 {currentViews.ValueKind}";
+
+            var goldenCount = goldenViews.GetArrayLength();
+            var currentCount = currentViews.GetArrayLength();
+            if (goldenCount != currentCount)
+                return $"视图数不一致：golden {goldenCount} vs 当前 {currentCount}。{TopologyDivergenceHint}";
+
+            for (var v = 0; v < goldenCount; v++)
+            {
+                var divergence = FindViewDivergence(goldenViews[v], currentViews[v], v);
+                if (divergence != null)
+                    return divergence;
+            }
+
+            return null;
+        }
+
+        /// <summary>解析 JSON（统一以分歧消息收敛，不让 JsonException 穿透）。</summary>
+        static JsonDocument? TryParseJson(string text, string what, out string? error)
+        {
+            try
+            {
+                error = null;
+                return JsonDocument.Parse(text);
+            }
+            catch (JsonException ex)
+            {
+                error = $"{what} JSON 解析失败：{ex.Message}";
+                return null;
+            }
+        }
+
+        static string? FindViewDivergence(JsonElement goldenView, JsonElement currentView, int viewIndex)
+        {
+            var path = $"视图 {viewIndex} [{JsonString(goldenView, "view") ?? "?"}]";
+            if (goldenView.ValueKind != JsonValueKind.Object || currentView.ValueKind != JsonValueKind.Object)
+                return $"{path}：视图必须是 JSON 对象（golden {goldenView.ValueKind} / 当前 {currentView.ValueKind}）";
+
+            // view 名：精确相等。
+            var goldenName = JsonString(goldenView, "view");
+            var currentName = JsonString(currentView, "view");
+            if (goldenName != currentName)
+                return $"{path}：view 名不一致：golden \"{goldenName}\" vs 当前 \"{currentName}\"";
+
+            // 线段/圆弧计数：精确相等（拓扑敏感通道，DEFECT-011）。
+            var segmentsCount = FindArrayCountDivergence(goldenView, currentView, "segments", path);
+            if (segmentsCount != null)
+                return segmentsCount;
+            var arcsCount = FindArrayCountDivergence(goldenView, currentView, "arcs", path);
+            if (arcsCount != null)
+                return arcsCount;
+
+            // segments[i]：a[2] / b[2]（数值）+ visible（标志精确）。先比源数据、后比派生读数，
+            // 使「首个分歧」指向根因字段（如线段端点）而不是由它导出的 bounds。
+            var goldenSegments = goldenView.GetProperty("segments");
+            var currentSegments = currentView.GetProperty("segments");
+            for (var i = 0; i < goldenSegments.GetArrayLength(); i++)
+            {
+                var segmentPath = $"{path}.segments[{i}]";
+                var divergence = ComparePoint2(segmentPath, "a", goldenSegments[i], currentSegments[i])
+                    ?? ComparePoint2(segmentPath, "b", goldenSegments[i], currentSegments[i])
+                    ?? CompareFlagProperty(segmentPath, "visible", goldenSegments[i], currentSegments[i]);
+                if (divergence != null)
+                    return divergence;
+            }
+
+            // arcs[i]：cx/cy/r/start/sweep（数值）+ visible/closed（标志精确）。
+            var goldenArcs = goldenView.GetProperty("arcs");
+            var currentArcs = currentView.GetProperty("arcs");
+            for (var i = 0; i < goldenArcs.GetArrayLength(); i++)
+            {
+                var arcPath = $"{path}.arcs[{i}]";
+                var divergence = CompareNumberProperty(arcPath, "cx", goldenArcs[i], currentArcs[i])
+                    ?? CompareNumberProperty(arcPath, "cy", goldenArcs[i], currentArcs[i])
+                    ?? CompareNumberProperty(arcPath, "r", goldenArcs[i], currentArcs[i])
+                    ?? CompareNumberProperty(arcPath, "start", goldenArcs[i], currentArcs[i])
+                    ?? CompareNumberProperty(arcPath, "sweep", goldenArcs[i], currentArcs[i])
+                    ?? CompareFlagProperty(arcPath, "visible", goldenArcs[i], currentArcs[i])
+                    ?? CompareFlagProperty(arcPath, "closed", goldenArcs[i], currentArcs[i]);
+                if (divergence != null)
+                    return divergence;
+            }
+
+            // bounds = [minX, minY, maxX, maxY]（派生读数；数值 1e-6）。
+            if (!goldenView.TryGetProperty("bounds", out var goldenBounds) || goldenBounds.ValueKind != JsonValueKind.Array)
+                return $"{path}：golden 缺少 bounds 数组";
+            if (!currentView.TryGetProperty("bounds", out var currentBounds) || currentBounds.ValueKind != JsonValueKind.Array)
+                return $"{path}：当前输出缺少 bounds 数组";
+            if (goldenBounds.GetArrayLength() != 4 || currentBounds.GetArrayLength() != 4)
+                return $"{path}：bounds 必须是 [minX,minY,maxX,maxY]（golden {goldenBounds.GetArrayLength()} / 当前 {currentBounds.GetArrayLength()}）";
+            for (var k = 0; k < 4; k++)
+            {
+                var divergence = CompareNumber($"{path}.bounds[{k}]", goldenBounds[k], currentBounds[k]);
+                if (divergence != null)
+                    return divergence;
+            }
+
+            return null;
+        }
+
+        static string? JsonString(JsonElement element, string property)
+        {
+            return element.ValueKind == JsonValueKind.Object
+                && element.TryGetProperty(property, out var value)
+                && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
+        }
+
+        static string? FindArrayCountDivergence(JsonElement goldenView, JsonElement currentView, string property, string path)
+        {
+            if (!goldenView.TryGetProperty(property, out var goldenArray) || goldenArray.ValueKind != JsonValueKind.Array)
+                return $"{path}：golden 缺少 {property} 数组";
+            if (!currentView.TryGetProperty(property, out var currentArray) || currentArray.ValueKind != JsonValueKind.Array)
+                return $"{path}：当前输出缺少 {property} 数组";
+
+            var goldenLength = goldenArray.GetArrayLength();
+            var currentLength = currentArray.GetArrayLength();
+            return goldenLength == currentLength
+                ? null
+                : $"{path}.{property} 计数不一致：golden {goldenLength} vs 当前 {currentLength}。{TopologyDivergenceHint}";
+        }
+
+        static string? ComparePoint2(string path, string property, JsonElement golden, JsonElement current)
+        {
+            if (!golden.TryGetProperty(property, out var goldenPoint))
+                return $"{path}.{property}：golden 缺少字段";
+            if (!current.TryGetProperty(property, out var currentPoint))
+                return $"{path}.{property}：当前输出缺少字段";
+            if (goldenPoint.ValueKind != JsonValueKind.Array || currentPoint.ValueKind != JsonValueKind.Array)
+                return $"{path}.{property}：必须是 [x,y] 数组（golden {goldenPoint.ValueKind} / 当前 {currentPoint.ValueKind}）";
+            if (goldenPoint.GetArrayLength() != 2 || currentPoint.GetArrayLength() != 2)
+                return $"{path}.{property}：必须是 [x,y]（golden {goldenPoint.GetArrayLength()} / 当前 {currentPoint.GetArrayLength()}）";
+
+            for (var k = 0; k < 2; k++)
+            {
+                var divergence = CompareNumber($"{path}.{property}[{k}]", goldenPoint[k], currentPoint[k]);
+                if (divergence != null)
+                    return divergence;
+            }
+
+            return null;
+        }
+
+        static string? CompareNumberProperty(string path, string property, JsonElement golden, JsonElement current)
+        {
+            if (!golden.TryGetProperty(property, out var goldenValue))
+                return $"{path}.{property}：golden 缺少字段";
+            if (!current.TryGetProperty(property, out var currentValue))
+                return $"{path}.{property}：当前输出缺少字段";
+            return CompareNumber($"{path}.{property}", goldenValue, currentValue);
+        }
+
+        static string? CompareFlagProperty(string path, string property, JsonElement golden, JsonElement current)
+        {
+            if (!golden.TryGetProperty(property, out var goldenValue))
+                return $"{path}.{property}：golden 缺少字段";
+            if (!current.TryGetProperty(property, out var currentValue))
+                return $"{path}.{property}：当前输出缺少字段";
+
+            var goldenFlag = AsBool(goldenValue);
+            var currentFlag = AsBool(currentValue);
+            if (goldenFlag == null || currentFlag == null)
+                return $"{path}.{property}：必须是布尔（golden {goldenValue.ValueKind} / 当前 {currentValue.ValueKind}）";
+            return goldenFlag == currentFlag
+                ? null
+                : $"{path}.{property} 标志不一致：golden {(goldenFlag.Value ? "true" : "false")} vs 当前 {(currentFlag.Value ? "true" : "false")}";
+        }
+
+        static bool? AsBool(JsonElement element)
+        {
+            return element.ValueKind == JsonValueKind.True ? true
+                : element.ValueKind == JsonValueKind.False ? false
+                : (bool?)null;
+        }
+
+        /// <summary>数值容差比对：绝对差 ≤ 1e-6，或 ≤ 1e-6·max(|golden|,|当前|)（相对，近零时绝对兜底）。</summary>
+        static string? CompareNumber(string path, JsonElement golden, JsonElement current)
+        {
+            if (golden.ValueKind != JsonValueKind.Number)
+                return $"{path}：golden 不是数字（{golden.ValueKind}）";
+            if (current.ValueKind != JsonValueKind.Number)
+                return $"{path}：当前输出不是数字（{current.ValueKind}）";
+
+            var goldenValue = golden.GetDouble();
+            var currentValue = current.GetDouble();
+            var difference = Math.Abs(goldenValue - currentValue);
+            var scale = Math.Max(Math.Abs(goldenValue), Math.Abs(currentValue));
+            if (difference <= SemanticNumberTolerance || difference <= SemanticNumberTolerance * scale)
+                return null;
+
+            return $"{path}：golden {FormatNumber(goldenValue)} vs 当前 {FormatNumber(currentValue)}"
+                + $"（绝对差 {FormatNumber(difference)}）超出 1e-6 容差（相对/近零绝对）";
+        }
+
+        static string FormatNumber(double value)
+        {
+            return value.ToString("R", CultureInfo.InvariantCulture);
+        }
+
+        // ─────────────── 语义比对器自测（DEFECT-011；合成输入，两平台确定性） ───────────────
+
+        [Test]
+        public void SemanticJsonComparison_UlpDrift_IsEquivalent_AndRealDrift_Caught()
+        {
+            var baseline = ViewJson.Serialize(new[] { SyntheticSemanticView(secondEndX: 3.25, firstVisible: true) });
+
+            // 模拟 glibc vs UCRT 的 ≤1 ULP 漂移：数值差 ~4.4e-16，但「R」文本已不同（3.25 → 3.2500000000000004）。
+            var ulpDrifted = ViewJson.Serialize(new[] { SyntheticSemanticView(secondEndX: UlpUp(3.25), firstVisible: true) });
+            Assert.That(ulpDrifted, Is.Not.EqualTo(baseline), "测试前提：1 ULP 漂移必须改变序列化字节（R 文本不同）");
+            Assert.That(FindJsonSemanticDivergence(baseline, ulpDrifted), Is.Null,
+                "ULP 级漂移（跨平台 libm 的实测量级）必须在 1e-6 语义容差内放行");
+
+            var drifted = ViewJson.Serialize(new[] { SyntheticSemanticView(secondEndX: 3.251, firstVisible: true) });
+            var divergence = FindJsonSemanticDivergence(baseline, drifted);
+            Assert.That(divergence, Is.Not.Null, "超出 1e-6 容差的数值漂移必须报分歧");
+            StringAssert.Contains(".segments[0].b[0]", divergence);
+            StringAssert.Contains("超出 1e-6 容差", divergence);
+        }
+
+        [Test]
+        public void SemanticJsonComparison_CountMismatch_IsLoud()
+        {
+            var golden = ViewJson.Serialize(new[] { SyntheticSemanticView(segmentCount: 2, arcCount: 1) });
+
+            var fewerSegments = ViewJson.Serialize(new[] { SyntheticSemanticView(segmentCount: 1, arcCount: 1) });
+            var segmentDivergence = FindJsonSemanticDivergence(golden, fewerSegments);
+            Assert.That(segmentDivergence, Is.Not.Null, "线段数不一致不得静默通过（拓扑敏感通道）");
+            StringAssert.Contains("segments 计数不一致", segmentDivergence);
+            StringAssert.Contains("DEFECT-011", segmentDivergence);
+
+            var noArcs = ViewJson.Serialize(new[] { SyntheticSemanticView(segmentCount: 2, arcCount: 0) });
+            var arcDivergence = FindJsonSemanticDivergence(golden, noArcs);
+            Assert.That(arcDivergence, Is.Not.Null, "圆弧数不一致不得静默通过（拓扑敏感通道）");
+            StringAssert.Contains("arcs 计数不一致", arcDivergence);
+            StringAssert.Contains("DEFECT-011", arcDivergence);
+        }
+
+        [Test]
+        public void SemanticJsonComparison_FlagMismatch_IsCaught()
+        {
+            var golden = ViewJson.Serialize(new[] { SyntheticSemanticView(firstVisible: true) });
+            var flipped = ViewJson.Serialize(new[] { SyntheticSemanticView(firstVisible: false) });
+
+            var divergence = FindJsonSemanticDivergence(golden, flipped);
+            Assert.That(divergence, Is.Not.Null, "visible 标志不一致必须报分歧");
+            StringAssert.Contains("visible", divergence);
+        }
+
+        [Test]
+        public void SemanticJsonComparison_MalformedJson_IsReportedNotThrown()
+        {
+            var divergence = FindJsonSemanticDivergence("这不是 JSON", "[]");
+            Assert.That(divergence, Is.Not.Null, "golden 解析失败必须收敛为分歧消息，不得抛 JsonException");
+            StringAssert.Contains("golden JSON 解析失败", divergence);
+
+            Assert.That(FindJsonSemanticDivergence("[]", "[]"), Is.Null, "空视图列表语义等价");
+        }
+
+        [Test]
+        public void SemanticJsonComparison_RealGoldens_ParseAndMatchThemselves()
+        {
+            var goldens = RealViewGoldens();
+            Assert.That(goldens.Length, Is.GreaterThanOrEqualTo(10),
+                "Views 目录下的真实 golden 数量不足以构成非真空检查");
+
+            foreach (var goldenPath in goldens)
+            {
+                // 语义比对器必须能吃下每一个真实 golden 的完整格式（长数字文本、中文字段值）并自比等价；
+                // 若写出格式漂移导致解析失败，这里（两平台）就会判红，而非等到 Linux 才暴露。
+                var text = ReadGoldenText(goldenPath);
+                Assert.That(FindJsonSemanticDivergence(text, text), Is.Null,
+                    $"真实 golden 必须被语义层解析且自比等价：{goldenPath}");
+            }
+        }
+
+        [Test]
+        public void SemanticJsonComparison_RealGoldenWithUlpDrift_IsEquivalent()
+        {
+            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location);
+            Assert.That(results, Is.Not.Null.And.Not.Empty, "GoldenPaths 未能定位 Results 目录");
+            var goldenPath = Path.Combine(results!, "Views", $"{Fixture}.TabbedPlate_ThreeViews.json");
+            Assert.That(File.Exists(goldenPath), Is.True, $"golden 缺失：{goldenPath}");
+
+            // 整文件逐数字 1 ULP 上移 = 模拟 glibc vs UCRT 的最坏情形（每个「R」文本都可能漂移）。
+            // 对照：旧的字节比对在这种输入上必然失败（本任务的分层动机）。
+            var goldenText = ReadGoldenText(goldenPath);
+            var drifted = UlpDriftJsonNumbers(goldenText);
+            Assert.That(drifted, Is.Not.EqualTo(goldenText), "测试前提：漂移必须改变文本");
+            Assert.That(FindJsonSemanticDivergence(goldenText, drifted), Is.Null,
+                "真实 golden 的逐数字 1 ULP 漂移必须被 1e-6 语义容差放行");
+        }
+
+        /// <summary>枚举 Views 目录下的真实 JSON golden（排除 pending 残留 *_ .json）。</summary>
+        static string[] RealViewGoldens()
+        {
+            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location);
+            Assert.That(results, Is.Not.Null.And.Not.Empty, "GoldenPaths 未能定位 Results 目录");
+            var viewsDir = Path.Combine(results!, "Views");
+            Assert.That(Directory.Exists(viewsDir), Is.True, $"Views 目录缺失：{viewsDir}");
+
+            var goldens = new List<string>();
+            foreach (var path in Directory.GetFiles(viewsDir, $"{Fixture}.*.json"))
+            {
+                if (!path.EndsWith("_.json", StringComparison.Ordinal))
+                    goldens.Add(path);
+            }
+
+            goldens.Sort(StringComparer.Ordinal);
+            return goldens.ToArray();
+        }
+
+        static string ReadGoldenText(string path)
+        {
+            return File.ReadAllText(path, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        }
+
+        /// <summary>
+        /// 把 JSON 文本里的每个数字 token 上移 1 ULP 后重排（模拟跨平台 libm 输出的数字文本漂移）。
+        /// 仅用于本套件生成的 golden —— 其字符串值（视图名）不含数字，数字只以 JSON number 形态出现。
+        /// </summary>
+        static string UlpDriftJsonNumbers(string json)
+        {
+            return Regex.Replace(json, "-?[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?", match =>
+            {
+                var value = double.Parse(match.Value, NumberStyles.Float, CultureInfo.InvariantCulture);
+                return UlpUp(value).ToString("R", CultureInfo.InvariantCulture);
+            });
+        }
+
+        /// <summary>合成单视图（语义比对器自测专用；计数/标志/数值全部可参数化，取值均为精确可表示数）。</summary>
+        static ViewProjection SyntheticSemanticView(
+            int segmentCount = 2,
+            int arcCount = 1,
+            double secondEndX = 3.25,
+            bool firstVisible = true)
+        {
+            var segments = new List<ViewSegment>();
+            if (segmentCount >= 1)
+                segments.Add(new ViewSegment(new ViewPoint2(-1.5, 2.25), new ViewPoint2(secondEndX, -4.75), firstVisible));
+            if (segmentCount >= 2)
+                segments.Add(new ViewSegment(new ViewPoint2(0, 0), new ViewPoint2(1, 1), !firstVisible));
+
+            var arcs = new List<ViewArc>();
+            if (arcCount >= 1)
+                arcs.Add(new ViewArc(new ViewPoint2(1.5, -2.5), 3.75, 0.5, 0.75, isVisible: true, isClosed: false));
+            if (arcCount >= 2)
+                arcs.Add(new ViewArc(new ViewPoint2(-3, 1), 1.25, -0.5, 0.5, isVisible: false, isClosed: true));
+
+            return new ViewProjection(ViewDirections.Front, segments, arcs);
+        }
+
+        /// <summary>把双精度沿位模式上移 1 ULP（模拟跨平台 libm 的 ≤1 ULP 差）。</summary>
+        static double UlpUp(double value)
+        {
+            return BitConverter.Int64BitsToDouble(BitConverter.DoubleToInt64Bits(value) + 1);
         }
 
         /// <summary>JSON 对象的字段名序列（用于断言字段齐全与顺序）。</summary>

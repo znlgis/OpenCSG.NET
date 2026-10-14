@@ -879,6 +879,16 @@ $ find tests/OpenCSG.NET.Tests/Results \( -name '*_.stl' -o -name '*_.json' \) |
 
 `src/` 零改动（Plan F 仅测试侧/构建配置/工作流/文档）；缺陷册开放 10 条（001–010）+ 已修复 3 条（A1/A2/A4），双向索引由 `DefectRegistryTest` 强制。
 
+### 首跑勘误 — 跨平台 libm 与 DEFECT-011 分层落地（2026-10-14・后续任务）
+
+CI **首跑（run 38511973032）**结果：**windows-latest 全绿**（345/0 ×2 TFM；覆盖率门禁 PASS）；**ubuntu-latest 16 败 ×2 TFM**，且全部是字节级 golden（7 个 HLR JSON：TabbedPlate_ThreeViews / Sphere_ThreeViews / SectorCylinder270_ThreeViews / HexPrism_ThreeViews / DrilledPlate_FrontTop / Cylinder_ThreeViews / Cone_FrontTop；9 个 STL 基线：Tessellation_Default / Tessellation_TightTolerance / TabbedPlate_Default / SectorCylinder_90 / SectorCylinder_270 / PrismXY_Hexagon / OrientedSphere_Custom / FilletConcave_InnerCorner / CornerCut_Plate）——轴对齐夹具与 45 个 legacy 容差基线两平台皆绿。取证结论：换行/路径机制两平台均无问题（承下方已知限制 ⑥ 的「首跑须观察」），ubuntu 失败逐条归因于**跨平台 libm 非位级确定**（`Math.Sin/Cos/Atan2`：Windows UCRT vs Linux glibc ≤1 ULP），经曲面/旋转几何传播后被「R」（最短往返）格式放大成数字文本差；`TabbedPlate_ThreeViews` 单件 JSON 字节差 +3005（数字长度 vs 拓扑翻转待定性——语义层下次 CI 会以「计数不一致」响亮报出后者）。
+
+**登记 DEFECT-011**（低，只报告）。册行数勘误：本报告前文各处「缺陷册开放 10 条（001–010）」在本次登记后应为 **11 条（001–011）**。另注：Plan F / Task 1 结论「net8.0 与 net10.0 零行为差异 ⇒ 未登记 DEFECT-011」与本次登记不冲突——跨 TFM 仍零差异，本编号针对的是**跨 OS libm** 维度。
+
+**分层策略（既有裁定，已落地）**：Windows 维持字节指纹不变（golden 按 Windows 输出冻结 = **Windows-pinned**）；非 Windows 转语义校验——`ViewJsonGoldenTest.AssertGoldenJson`：视图/线段/圆弧计数与 view/visible/closed 标志精确 + 全部数值 1e-6（相对，近零 1e-6 绝对）；`ModuleBaselineGoldenTest.AssertAcceptedStl`：`solid <name>` 首行 + 三角形数精确 + 逐顶点 1e-4 绝对；**计数/拓扑不一致照旧判红**（拓扑敏感通道，不静默通过）。两夹具各加 6/7 个比对器用例（共 13 个，两平台确定性）：合成输入覆盖 ULP 漂移放行、超容差判红、计数响亮、标志、行尾（CRLF/LF）、坏输入收敛；真实数据覆盖 15+15 个 golden 全量解析自比 + TabbedPlate 整文件 1 ULP 漂移语义等价。Windows 本地复跑：Tests **358/0 ×2 TFM**、SystemTests 1109/0（net8.0）、`DefectRegistryTest` 17/17。
+
+**CI-only 残留**：非 Windows 分支本体与其平台消息只能在 ubuntu 复跑验证（本地 Windows 不可达）；TabbedPlate +3005 的「数字长度 vs 拓扑翻转」定性同样留待下次 CI——若语义层报「计数不一致」，即为拓扑翻转实锤（响亮失败，不静默）。
+
 ## 已知限制（收官定稿，六项）
 
 1. **`modreq` → 库内 `internal IsExternalInit` 的隐性运行时契约**。库为 netstandard2.0 目标的 `record`/`init` 携带 `src/OpenCSG.NET/CsgNode.cs` 中的 `internal IsExternalInit` polyfill；已编译消费方的 init setter MemberRef 带 `modreq(IsExternalInit)` 指向它（Plan A Task 6 ApiCompat 实测确认）。**改该声明前必读**：只要公共 API 仍含 `record`/`init` 就必须继续携带——移除后公共 API 面无变化，破坏只出现在已编译消费方的运行时。附带边界：消费方要在自己的编译单元内*声明* record/init 仍需自备 polyfill（CS0518，隔离复现证明与本库无关）；*消费*本库的 record/init 成员不需要。
@@ -886,6 +896,6 @@ $ find tests/OpenCSG.NET.Tests/Results \( -name '*_.stl' -o -name '*_.json' \) |
 3. **perf 门禁的机器噪声口径**。门禁判据 = 基线 min ×1.25（快操作 min<20ms 只报告）；超阈自动重测一次取更好 min；「中位数超阈但 min 未超」判为整轮机器状态被抬高的噪声。仅 nightly、非阻塞 PR；跨机器首跑差异按「机器指纹」对待：重跑确认 ⇒ 查负载 ⇒ 确认噪声则记录环境、不按回归；仅确认 runner 长期系统性偏移才 `--write-baseline` 重生成且**必须提交 diff**（禁止为让门禁变绿而重生成）。基线录制机为本机 `LK-PC` ⇒ 首轮 nightly 比值预计带上机器差。
 4. **并行/soak 结论**。并行档（`tests/ParallelRun.runsettings`，4 worker）为 **opt-in**，默认仍串行（B1 契约不破）。并行首跑即实证 DEFECT-001 串扰（Tests 341/342）⇒ 受影响夹具 `[NonParallelizable]`，并行 ×8（SystemTests）/×4（Tests）全绿、计数与串行一致。soak：SystemTests 累计 51 次连跑零 Failed（Plan E 25/25 全绿收口）；Plan C 记录的单次偶发失败此后未再复现——**残留不确定性**：无法证明其已被结构性消除，后续若再现请先开 TRX 捕获失败用例名。
 5. **跨运行时哈希一致结论及其边界**。net8.0 与 net10.0 对语料子集的求值/三视图/序列化/STL 的逐阶段与组合 SHA256 **完全一致**（`combined=97f2f11d…def75`；Plan E 两 TFM 各两次，Plan F 终验复现逐位相同）。边界：这是**同机同 OS** 的运行时版本对照，不构成跨 OS 保证——ubuntu/windows 矩阵首跑才首次验证跨平台一致性。
-6. **golden 的 `.gitattributes` 适用范围与换行敏感性**。现有规则仅一条：`Results/**/*.json text eol=lf`（JSON golden 以显式 `\n` 生成、`File.ReadAllBytes` 逐字节比对）。**STL 不在其内**：legacy 45 个 golden 的 `StlStringEquals` 按 `\r`/`\n` 双分隔解析（换行不敏感）；L4 新增的 15 个 byte-exact 模块基线经 `Solid.ToStlString` ⇒ 行尾随 `Environment.NewLine`（Windows CRLF / Linux LF）。**`core.autocrlf=false` 的 Windows 克隆**：检出 LF 基线 + 运行输出 CRLF ⇒ 字节比对失配（本地判别力实测：手动 LF 化一份基线即红）；常规检出（autocrlf=true）与 CI 两平台预期均绿。ubuntu/windows 矩阵**首跑须观察**——若某平台因换行机制转红，按 ci.yml 注释纪律先调查取证并登记（tests/DEFECTS.md），不得静默删除该平台。
+6. **golden 的 `.gitattributes` 适用范围与换行敏感性**。现有规则仅一条：`Results/**/*.json text eol=lf`（JSON golden 以显式 `\n` 生成、`File.ReadAllBytes` 逐字节比对）。**STL 不在其内**：legacy 45 个 golden 的 `StlStringEquals` 按 `\r`/`\n` 双分隔解析（换行不敏感）；L4 新增的 15 个 byte-exact 模块基线经 `Solid.ToStlString` ⇒ 行尾随 `Environment.NewLine`（Windows CRLF / Linux LF）。**`core.autocrlf=false` 的 Windows 克隆**：检出 LF 基线 + 运行输出 CRLF ⇒ 字节比对失配（本地判别力实测：手动 LF 化一份基线即红）；常规检出（autocrlf=true）与 CI 两平台预期均绿。**首跑观察结果（2026-10-14，run 38511973032）**：换行/路径机制两平台均无问题（windows 全绿）；ubuntu 的 16 败 ×2 TFM 与该机制无关——全部归因于跨平台 libm 非位级确定（登记 DEFECT-011）⇒ 字节级基线就此裁定为 **Windows-pinned**，非 Windows 改走语义校验（详上「首跑勘误」小节与 ci.yml 矩阵注释）；再转红时按 ci.yml 注释纪律先调查取证并登记，不得静默删除该平台。
 
 以上六项均为本地实测 + 仓库/代码实证的边界结论；GitHub Actions 本体（调度、矩阵、工件上传、setup-dotnet 多版本安装语义）无法本地运行——相关结论以首次实际 CI 运行记录为准。

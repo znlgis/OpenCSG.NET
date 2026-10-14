@@ -24,13 +24,17 @@ jobs:
       # 一个平台失败不允许取消另一个。
       fail-fast: false
       matrix:
-        # 双平台（spec §8.2 条目 2）：golden 机制依赖 Environment.NewLine 与
-        # 4 层路径推导，此前只在 ubuntu 验证过；Results/**/*.json 已由
-        # .gitattributes 固定 eol=lf（入库/检出逐字节一致），STL 字节级基线
-        # 依赖 Windows 的 Environment.NewLine（windows 检出 autocrlf=true ⇒ CRLF，
-        # 与 Windows 下的 STL 输出一致）。
-        # 若某个平台因换行机制转红 ⇒ 那是**真发现**：先调查取证并在
-        # tests/DEFECTS.md 登记，不得直接把该平台从矩阵删除。
+        # 双平台（spec §8.2 条目 2）：golden 机制依赖 Environment.NewLine 与 4 层路径推导。
+        # 2026-10-14 首跑（run 38511973032）结论：换行/路径机制两平台均无问题（windows 全绿）；
+        # ubuntu 的 16 败 ×2 TFM 全部归因于**跨平台 libm 非位级确定**（Math.Sin/Cos/Atan2：
+        # Windows UCRT vs Linux glibc ≤1 ULP 差，经曲面/旋转几何把「R」数字文本放大成字节差）
+        # ⇒ 按纪律取证并登记 DEFECT-011。
+        # 分层裁定（矩阵保留双平台；字节级 golden = **Windows-pinned** 指纹）：
+        #   Windows   → File.ReadAllBytes 逐字节比对（golden 按 Windows 输出冻结）；
+        #   非 Windows → 语义校验：JSON（视图/线段/圆弧计数与 view/visible/closed 标志精确 +
+        #               数值 1e-6 相对/近零绝对）、STL（solid 名 + 三角形数精确 + 顶点 1e-4 绝对）。
+        # 计数/拓扑不一致两平台一律判红（拓扑敏感通道，不静默通过）；若某平台转红且不在语义
+        # 容差内 ⇒ 那是**真发现**：先调查取证并在 tests/DEFECTS.md 登记，不得直接把该平台从矩阵删除。
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
 
@@ -66,7 +70,8 @@ jobs:
       #      而全量运行正确跳过）。TRX 逐结果计数（Task 1/Task 3 实测，全量口径）：
       #      Tests NotExecuted=8、SystemTests NotExecuted=160。
       # 不指定 -f ⇒ 依次跑 net8.0 与 net10.0 两个 TFM（Task 1 实测两 TFM 各 342/0；
-      # Task 2 回填 3 个 Tessellation 用例后为 345/0；golden 共享同一个
+      # Task 2 回填 3 个 Tessellation 用例后为 345/0；DEFECT-011 语义层新增 13 个比对器
+      # 用例（两平台确定性）后为 358/0；golden 共享同一个
       # tests/OpenCSG.NET.Tests/Results 目录，两边皆绿）。
       # 本地快速档：dotnet test tests/OpenCSG.NET.Tests -c Release -f net8.0。
       - name: Test (OpenCSG.NET.Tests, unfiltered, dual TFM)
