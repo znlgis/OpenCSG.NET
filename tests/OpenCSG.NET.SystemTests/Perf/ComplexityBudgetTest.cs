@@ -12,6 +12,11 @@ namespace Csg.Test
     /// 计时协议见 <see cref="BudgetClock"/>（采样 min）；比值口径同样用 min/min
     /// （单次采样的中位数会被堆状态/机器状态抬高 1.4–2×，比值会从 ≈17 漂到 ≈25）。
     /// </para>
+    /// <para>
+    /// CI 环境（<c>CI=true</c>）绝对预算再 ×<see cref="BudgetClock.CiAbsoluteBudgetFactor"/> = 10
+    /// （runner 方差实例：Clean n=5000 本机 33.0ms / ubuntu runner 205.1ms，第四跑 run 38516368026）；
+    /// **比值守卫不乘系数** —— 见下方 O(n²) 判定处注释（机器无关不变量，两平台保持紧）。
+    /// </para>
     /// </summary>
     [TestFixture]
     [Category("Perf")]
@@ -48,8 +53,9 @@ namespace Csg.Test
             var measured5k = BudgetClock.MinMs(3, 1, () => ViewSegmentCleanup.Clean(segments5k, bounds5k));
             var measured20k = BudgetClock.MinMs(3, 1, () => ViewSegmentCleanup.Clean(segments20k, bounds20k));
             TestContext.Progress.WriteLine(
-                $"[Perf] Clean 5k={measured5k:F1}ms/{CleanBudget5kMs:F1}ms，20k={measured20k:F1}ms/{CleanBudget20kMs:F1}ms，"
-                + $"比值 {measured20k / measured5k:F2}");
+                $"[Perf] Clean 5k={measured5k:F1}ms/{BudgetClock.EffectiveBudgetMs(CleanBudget5kMs):F1}ms，"
+                + $"20k={measured20k:F1}ms/{BudgetClock.EffectiveBudgetMs(CleanBudget20kMs):F1}ms，"
+                + $"比值 {measured20k / measured5k:F2}（CI={BudgetClock.IsCiRun}）");
 
             BudgetClock.AssertWithinBudget("Clean n=5000", measured5k, CleanBudget5kMs,
                 "3 采样 × 1 次调用，取 min", "33.0ms（工具 --complexity 实测 min，2026-10-14）");
@@ -59,7 +65,9 @@ namespace Csg.Test
             // O(n²) 判定：理论 20k/5k ≈ 16×（Clean 的折叠步骤按对比较），实测 17.0–17.6（同机同输入）；
             // 关闭动态 PGO 的复测（失真配置）实测 24.54 ⇒ 上限 32 的余量 ≈ 32 ÷ 24.54 ≈ 1.3×。
             // <32 是**宽界**：抓「忽然多项式升级」——n^2.5 级 ⇒ 4^2.5 = 32（恰为上限、按 < 判定即失败）、
-            // n^3 级 ⇒ 4^3 = 64；不是 1.5× 级抖动。
+            // n^3 级 ⇒ 4^3 = 64；不是 1.5× 级抖动。**本守卫是机器无关不变量：CI 环境不乘
+            // BudgetClock.CiAbsoluteBudgetFactor，两个平台都保持紧** —— 绝对预算随 runner 放宽（挂起
+            // 探测器），复杂度升级由本比值（与本机回归信号）承担；任何情况下不得调大比值界。
             var ratio = measured20k / measured5k;
             Assert.That(ratio, Is.LessThan(32.0),
                 $"Clean 20k/5k 耗时比实测 {ratio:F2}（min/min；理论 O(n²) ≈16，实测正常域 17.0–17.6，"
@@ -93,7 +101,8 @@ namespace Csg.Test
             var measured5k = BudgetClock.MinMs(3, 1, () => new ViewProjector(mesh5k).Project());
             var measured20k = BudgetClock.MinMs(3, 1, () => new ViewProjector(mesh20k).Project());
             TestContext.Progress.WriteLine(
-                $"[Perf] Project 5k={measured5k:F1}ms/{ProjectBudget5kMs:F1}ms，20k={measured20k:F1}ms/{ProjectBudget20kMs:F1}ms");
+                $"[Perf] Project 5k={measured5k:F1}ms/{BudgetClock.EffectiveBudgetMs(ProjectBudget5kMs):F1}ms，"
+                + $"20k={measured20k:F1}ms/{BudgetClock.EffectiveBudgetMs(ProjectBudget20kMs):F1}ms（CI={BudgetClock.IsCiRun}）");
 
             BudgetClock.AssertWithinBudget("Project 5000 三角形（三视图 900² 栅格）", measured5k, ProjectBudget5kMs,
                 "3 采样 × 1 次 Project（含拓扑焊接），取 min", "214.7ms（工具 --complexity 实测 min，2026-10-14）");

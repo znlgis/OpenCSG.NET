@@ -11,6 +11,8 @@ namespace Csg.Test
     /// <para>
     /// 全部读数为**实测钉**（2026-10-14，探针 <c>artifacts/planE/probe</c>，同机同输入逐段 dump 后取数）；
     /// 预算 = 实测 × 5（协议与基准写在每条断言消息里，见 <see cref="BudgetClock"/>）。
+    /// CI 环境（<c>CI=true</c>）绝对预算再 ×<see cref="BudgetClock.CiAbsoluteBudgetFactor"/> = 10
+    /// （runner 方差：Clean 5k 本机 33.0ms / ubuntu runner 205.1ms，第四跑 run 38516368026）。
     /// 行为钉的含义：读数由当前实现确定，任何变化都要求人工重钉并在报告里说明 —— 不得直接改数字。
     /// </para>
     /// </summary>
@@ -76,7 +78,8 @@ namespace Csg.Test
             // ③ 不挂起预算：三视图 ×10 轮（实测 36.3ms，min of 5 采样）。
             var measured = BudgetClock.MinMs(3, 10,
                 () => ViewBridge.ProjectViews(solid, ViewDirections.OrthographicThree));
-            TestContext.Progress.WriteLine($"[Perf] 薄板凸台三视图 ×10：实测 {measured:F1}ms / 预算 {ThinPlateBudgetMs:F1}ms");
+            TestContext.Progress.WriteLine(
+                $"[Perf] 薄板凸台三视图 ×10：实测 {measured:F1}ms / 生效预算 {BudgetClock.EffectiveBudgetMs(ThinPlateBudgetMs):F1}ms（CI={BudgetClock.IsCiRun}）");
             BudgetClock.AssertWithinBudget("薄板凸台三视图 ×10", measured, ThinPlateBudgetMs,
                 "3 采样 × 每采样 10 轮三视图，取 min", "36.3ms（探针同协议实测）");
         }
@@ -134,7 +137,8 @@ namespace Csg.Test
             // ③ 不挂起预算：三视图 ×10 轮（实测 33.9ms，min of 5 采样）。
             var measured = BudgetClock.MinMs(3, 10,
                 () => ViewBridge.ProjectViews(solid, ViewDirections.OrthographicThree));
-            TestContext.Progress.WriteLine($"[Perf] 1e6 长圆柱三视图 ×10：实测 {measured:F1}ms / 预算 {LongCylinderBudgetMs:F1}ms");
+            TestContext.Progress.WriteLine(
+                $"[Perf] 1e6 长圆柱三视图 ×10：实测 {measured:F1}ms / 生效预算 {BudgetClock.EffectiveBudgetMs(LongCylinderBudgetMs):F1}ms（CI={BudgetClock.IsCiRun}）");
             BudgetClock.AssertWithinBudget("1e6 长圆柱三视图 ×10", measured, LongCylinderBudgetMs,
                 "3 采样 × 每采样 10 轮三视图，取 min", "33.9ms（探针同协议实测）");
         }

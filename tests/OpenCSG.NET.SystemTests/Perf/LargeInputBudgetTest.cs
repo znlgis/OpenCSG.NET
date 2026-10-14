@@ -8,6 +8,8 @@ namespace Csg.Test
     /// NodeGen 深树求值。输入与 <c>perf/OpenCSG.NET.PerfTest</c> 的 Fit/Evaluate 两项**同源**
     /// （<see cref="PerfWorkloads"/>）；预算 = 实测 × 5，实测值见常量与断言消息。计时协议见
     /// <see cref="BudgetClock"/>（采样 min；单次采样的中位数受堆/机器状态影响可达 1.4–2×）。
+    /// CI 环境（<c>CI=true</c>）绝对预算再 ×<see cref="BudgetClock.CiAbsoluteBudgetFactor"/> = 10
+    /// （runner 方差：Clean 5k 本机 33.0ms / ubuntu runner 205.1ms，第四跑 run 38516368026）。
     /// </summary>
     [TestFixture]
     [Category("Perf")]
@@ -37,7 +39,8 @@ namespace Csg.Test
 
             // 计时口径 = 工具侧套件同款（连续 5 轮 Fit），抵单轮 ≈6ms 的噪声。
             var measured = BudgetClock.MinMs(3, 5, () => ViewArcFitter.Fit(segments));
-            TestContext.Progress.WriteLine($"[Perf] Fit(16k 段 × 5 轮)：实测 {measured:F1}ms / 预算 {FitBudgetMs:F1}ms");
+            TestContext.Progress.WriteLine(
+                $"[Perf] Fit(16k 段 × 5 轮)：实测 {measured:F1}ms / 生效预算 {BudgetClock.EffectiveBudgetMs(FitBudgetMs):F1}ms（CI={BudgetClock.IsCiRun}）");
             BudgetClock.AssertWithinBudget("ViewArcFitter.Fit（16000 段 × 5 轮）", measured, FitBudgetMs,
                 "3 采样 × 每采样 5 轮 Fit，取 min",
                 "43.0ms（探针同协议实测中位数；工具套件 Fit 项 min 33.3ms）");
@@ -72,7 +75,7 @@ namespace Csg.Test
                     CsgEvaluator.Evaluate(tree);
             });
             TestContext.Progress.WriteLine(
-                $"[Perf] Evaluate d5×8：实测 {measured:F1}ms / 预算 {DeepTreeEvaluateBudgetMs:F1}ms");
+                $"[Perf] Evaluate d5×8：实测 {measured:F1}ms / 生效预算 {BudgetClock.EffectiveBudgetMs(DeepTreeEvaluateBudgetMs):F1}ms（CI={BudgetClock.IsCiRun}）");
             BudgetClock.AssertWithinBudget("NodeGen 深树（d5×8）Evaluate", measured, DeepTreeEvaluateBudgetMs,
                 "3 采样 × 1 趟（8 棵树），取 min",
                 "88.7ms（探针同协议实测中位数；工具套件 Evaluate 项 min 27.2ms）");
