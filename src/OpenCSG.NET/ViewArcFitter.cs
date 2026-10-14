@@ -125,11 +125,21 @@ public static class ViewArcFitter
     /// <summary>默认拟合容差（mm）。</summary>
     public const double DefaultTolerance = 0.05;
 
-    /// <summary>打开链诊断（探针/测试用；默认关，避免热路径拼字符串）。</summary>
-    public static bool DiagnosticsEnabled { get; set; }
+    /// <summary>打开链诊断（探针/测试用；默认关，避免热路径拼字符串）。**线程局部**（DEFECT-001 修复：并行测试互不串扰）。</summary>
+    public static bool DiagnosticsEnabled
+    {
+        get => diagnosticsEnabled;
+        set => diagnosticsEnabled = value;
+    }
 
-    /// <summary>最近一次 <see cref="Fit"/> 的链诊断（<see cref="DiagnosticsEnabled"/> 打开时有效）。</summary>
-    public static string LastDiagnostics { get; private set; } = string.Empty;
+    /// <summary>最近一次 <see cref="Fit"/> 的链诊断（<see cref="DiagnosticsEnabled"/> 打开时有效）。**线程局部**（DEFECT-001 修复：并行测试互不串扰）。</summary>
+    public static string LastDiagnostics => lastDiagnostics ?? string.Empty;
+
+    [ThreadStatic]
+    static bool diagnosticsEnabled;
+
+    [ThreadStatic]
+    static string? lastDiagnostics;
 
     /// <summary>默认最少段数（3 段 = 4 个顶点才有拟合意义）。</summary>
     public const int DefaultMinSegments = 3;
@@ -168,10 +178,14 @@ public static class ViewArcFitter
         var kept = new List<T>(segments.Count);
         var consumed = new bool[segments.Count];
 
-        // 退化段（长度 ≤ max(容差, 接链容差)）：平行于视线的棱在 2D 里投影成一个点 —— 它们没有方向信息，
+        // 退化段（长度 ≤ 接链容差）：平行于视线的棱在 2D 里投影成一个点 —— 它们没有方向信息，
         // 却会把"前缘圆"和"后缘圆"在同一个投影点处串成一条乱链（圆柱轴向视图实测：整条链跨两圈 ⇒ 认不出圆）。
         // 直接排除出成链图，它们仍留在 kept 里交给后续碎片清理丢弃。
-        var degenerate = Math.Max(tolerance, join);
+        // **判据只用接链容差，不再并合拟合容差（DEFECT-004 机制② 修复）**：旧口径 max(容差 0.05, join)
+        // 把掠射轮廓按栅格切成的一格级碎段（实测 0.0087 ≈ cell）全部逐出成链 —— 锥形球前/俯视轮廓环
+        // 因此永远拼不圆；这些碎段端点明确（远长于 join 且端点焊接）、无串链风险，应当参与成链。
+        // 点状边（2D 长 ≤ join）仍被排除。
+        var degenerate = join;
 
         // 几何重复段折叠：投影会把"前后两条重合的棱"压成同一段（圆柱轴向视图：前缘圆与后缘圆逐点重合，
         // 各棱还被深度栅格切成上百个 0.1mm 小段）⇒ 不折叠的话链会在两条重合棱之间来回跳，永远闭不上口
@@ -196,13 +210,13 @@ public static class ViewArcFitter
                   .Append($"链 {chains.Count} 条，最大几条：[{string.Join(", ", sizes)}]");
             foreach (var chain in chains.OrderByDescending(c => c.Count).Take(2))
             {
-                var head = segments[chain[0]].Start;
-                var tail = segments[chain[chain.Count - 1]].End;
+                var head = EntryPoint(segments, chain[0]);
+                var tail = ExitPoint(segments, chain[chain.Count - 1]);
                 var gap = Math.Sqrt((head.X - tail.X) * (head.X - tail.X) + (head.Y - tail.Y) * (head.Y - tail.Y));
                 detail.Append($"; 链{chain.Count}: 首({head.X:F2},{head.Y:F2}) 末({tail.X:F2},{tail.Y:F2}) 首末距 {gap:F3}");
             }
 
-            LastDiagnostics = detail.ToString();
+            lastDiagnostics = detail.ToString();
         }
 
         foreach (var chain in chains)
@@ -372,6 +386,39 @@ public static class ViewArcFitter
 
     // —— ① 成链 ——
 
+    /// <summary>
+    /// 链成员：片段下标 + 朝向。<c>Reversed == false</c> ⇔ 沿链的自然行进方向**从 Start 走到 End**
+    /// （即 Start 是链入点、End 是链出点）；<c>true</c> 反之。
+    /// <para>
+    /// 朝向必须随链携带（DEFECT-004 修复）：投影边的原始朝向与链的前进方向无关（三角面片环绕序
+    /// 决定边的 Start/End），旧实现按「链端片段的 End 即尖端」推进 —— 候选边反向接入（以 End 接到
+    /// 尖端）时尖端原地不动、链当场截断（实测：干净 48 边圆环在 ±X 反向边处被切成 4 条链）。
+    /// 接点语义随延伸方向不同：**前向延伸要求新片段的入点接在尖端，后向延伸要求出点接在尖端**。
+    /// </para>
+    /// </summary>
+    readonly struct ChainMember
+    {
+        public ChainMember(int index, bool reversed)
+        {
+            Index = index;
+            Reversed = reversed;
+        }
+
+        public int Index { get; }
+
+        public bool Reversed { get; }
+    }
+
+    /// <summary>链入点（沿行进方向的进入端）。</summary>
+    static ViewPoint2 EntryPoint<T>(IReadOnlyList<T> segments, ChainMember member)
+        where T : IProjectedSegment
+        => member.Reversed ? segments[member.Index].End : segments[member.Index].Start;
+
+    /// <summary>链出点（沿行进方向的离开端）。</summary>
+    static ViewPoint2 ExitPoint<T>(IReadOnlyList<T> segments, ChainMember member)
+        where T : IProjectedSegment
+        => member.Reversed ? segments[member.Index].Start : segments[member.Index].End;
+
     /// <summary>几何重复段的代表元：<c>group[i]</c> = i 所在重复组的代表下标（自己就是代表时为 i）。</summary>
     private static int[] BuildDuplicateGroups<T>(IReadOnlyList<T> segments, double joinTolerance)
         where T : IProjectedSegment
@@ -404,7 +451,7 @@ public static class ViewArcFitter
         return group;
     }
 
-    private static List<List<int>> BuildChains<T>(
+    private static List<List<ChainMember>> BuildChains<T>(
         IReadOnlyList<T> segments,
         int[] group,
         bool[] consumed,
@@ -431,7 +478,7 @@ public static class ViewArcFitter
             Add(segments[i].End, i);
         }
 
-        var chains = new List<List<int>>();
+        var chains = new List<List<ChainMember>>();
         var used = new HashSet<int>();
 
         for (var seed = 0; seed < segments.Count; seed++)
@@ -439,7 +486,7 @@ public static class ViewArcFitter
             if (consumed[seed] || group[seed] != seed || used.Contains(seed)
                 || Length(segments[seed]) <= degenerateLength) continue;
 
-            var chain = new List<int> { seed };
+            var chain = new List<ChainMember> { new ChainMember(seed, reversed: false) };
             used.Add(seed);
 
             // 向两端延伸（靠端点索引找下一条未用线段）。
@@ -451,21 +498,28 @@ public static class ViewArcFitter
 
         return chains;
 
-        void Grow(List<int> chain, bool forward)
+        void Grow(List<ChainMember> chain, bool forward)
         {
             while (true)
             {
-                var lastIndex = forward ? chain[chain.Count - 1] : chain[0];
-                var tip = forward ? segments[lastIndex].End : segments[lastIndex].Start;
-                var next = FindNext(tip, lastIndex, forward);
+                var last = forward ? chain[chain.Count - 1] : chain[0];
+                var tip = forward ? ExitPoint(segments, last) : EntryPoint(segments, last);
+                var near = forward ? EntryPoint(segments, last) : ExitPoint(segments, last);
+                var next = FindNext(tip, near, forward);
                 if (next < 0) return;
 
+                // 接点语义随延伸方向不同（DEFECT-004 修复）：前向延伸要求新片段的**入点**接在尖端
+                // （Start 接上 ⇒ 顺行 false）；后向延伸要求**出点**接在尖端（Start 接上 ⇒ 逆行 true）。
+                var startAtTip = Distance(segments[next].Start, tip) <= joinTolerance;
+                var reversed = forward ? !startAtTip : startAtTip;
+
                 used.Add(next);
-                if (forward) chain.Add(next); else chain.Insert(0, next);
+                var member = new ChainMember(next, reversed);
+                if (forward) chain.Add(member); else chain.Insert(0, member);
             }
         }
 
-        int FindNext(ViewPoint2 tip, int source, bool forward)
+        int FindNext(ViewPoint2 tip, ViewPoint2 near, bool forward)
         {
             if (!buckets.TryGetValue(Key(tip, joinTolerance), out var candidates)) return -1;
 
@@ -473,7 +527,7 @@ public static class ViewArcFitter
             var bestScore = double.MaxValue;
             foreach (var candidate in candidates)
             {
-                if (candidate == source || used.Contains(candidate) || consumed[candidate]) continue;
+                if (used.Contains(candidate) || consumed[candidate]) continue;
                 if (group[candidate] != candidate || Length(segments[candidate]) <= degenerateLength) continue;
 
                 // 端点相接（容差随视图尺度自适应，用来过滤哈希网格的近似命中）。
@@ -483,7 +537,7 @@ public static class ViewArcFitter
                 if (!connects) continue;
 
                 var other = Distance(start, tip) <= joinTolerance ? end : start;
-                var incoming = Subtract(tip, forward ? segments[source].Start : segments[source].End);
+                var incoming = Subtract(tip, near);
                 var outgoing = Subtract(other, tip);
 
                 // 取"转角最小"的候选：链优先沿平滑方向延续。
@@ -504,7 +558,7 @@ public static class ViewArcFitter
     private static void ScanChain<T>(
         IReadOnlyList<T> segments,
         bool[] effectiveVisible,
-        List<int> chain,
+        List<ChainMember> chain,
         bool[] consumed,
         int[] group,
         List<ViewArc> arcs,
@@ -517,10 +571,11 @@ public static class ViewArcFitter
         if (chain.Count < minSegments) return;
 
         var vertices = new List<ViewPoint2>(chain.Count + 1);
-        var first = segments[chain[0]];
-        vertices.Add(first.Start);
-        foreach (var index in chain)
-            vertices.Add(segments[index].End);
+        // 顶点装配必须按成员朝向取入点/出点（DEFECT-004 修复）：沿链的自然方向，第 k 个顶点
+        // = 第 k 个成员的出点（= 第 k+1 个成员的入点）。
+        vertices.Add(EntryPoint(segments, chain[0]));
+        foreach (var member in chain)
+            vertices.Add(ExitPoint(segments, member));
 
         // ① 先试「整条链就是一段圆弧/整圆」——这是最常见的情形（一条投影边链 = 一段弧），
         //    且全局最小二乘对逐点抖动的抑制最好，不会被局部窗口切成碎片。
@@ -529,8 +584,8 @@ public static class ViewArcFitter
                 MajorityVisible(effectiveVisible, chain, 0, chain.Count), tolerance, joinTolerance, out var wholeArc))
         {
             arcs.Add(wholeArc);
-            foreach (var index in chain)
-                consumed[index] = true;
+            foreach (var member in chain)
+                consumed[member.Index] = true;
             return;
         }
 
@@ -586,7 +641,7 @@ public static class ViewArcFitter
 
             arcs.Add(arc);
             for (var k = i; k < accepted; k++)
-                consumed[chain[k]] = true;
+                consumed[chain[k].Index] = true;
 
             i = accepted;
         }
@@ -594,14 +649,14 @@ public static class ViewArcFitter
 
     /// <summary>所辖线段的多数票可见性（弧跨 V-H 交替时按多数落实线/虚线）。</summary>
     private static bool MajorityVisible(
-        bool[] effectiveVisible, List<int> chain, int from, int toExclusive)
+        bool[] effectiveVisible, List<ChainMember> chain, int from, int toExclusive)
     {
         var visible = 0;
         var total = 0;
         for (var k = from; k < toExclusive && k < chain.Count; k++)
         {
             total++;
-            if (effectiveVisible[chain[k]]) visible++;
+            if (effectiveVisible[chain[k].Index]) visible++;
         }
 
         return total == 0 || visible * 2 >= total;
@@ -637,6 +692,54 @@ public static class ViewArcFitter
                 largestGap = gap;
                 gapIndex = k;
             }
+        }
+
+        // **角步分布均匀性守卫**（DEFECT-012 修复）：把长直弦 + 端部圆角碎段簇的链误拟合为
+        // 巨半径弧（弦中点判据 5%·R 对单条长弦过宽——R=278.56 时放行 13.9mm，长弦中点偏差
+        // 9.2mm 照样通过）。真弧链的顶点按镶嵌角步**均匀**分布（12/24/48 边形：最大角步 =
+        // 平均角步 = 镶嵌步长；混采样 15°/30° 弦混排比值 ≈1.33）；伪链的角步集中在小段簇、
+        // 长弦一步跨过大幅张角（CPurlin 实锤 R≈279 弧一键吸收 142mm 直弦：最大步 29.3° 对
+        // 平均 ~3°，比值 ≈9；合成最小复刻整体 ≈4.3、含长弦的四点窗口 ≈2.8、纯碎段窗口由
+        // MinSweepDegrees 兜底）。判据：最大角步 ≤ 2.2 × 平均角步——取 2.2 是实测折中：
+        // 掠射视图的真弧链由 1–2 格碎段混成、角步可差 ~2 倍（DrilledPlate 左视实测），
+        // 1.6 会伪拒（该视图退回 205 段碎片）；而合成窗口伪弧 2.76 与 CPurlin 实锤 9 仍被拒。
+        if (angles.Count >= 4)
+        {
+            // 角步必须按**弧序**统计：从最大间隙（开口）之后的第一个顶点起，沿覆盖方向逐顶
+            // 累进（跨 0° 回绕 +2π），共 n−1 步。按排序表逐差是错的——长弦对应的角步恰在
+            // 0° 处被排序表劈成「最大间隙 + 兜底差」，伪链的长弦步会看不见（合成实锤：
+            // ±17°/±15.5°/±14.48° 链的长弦跨 28.96°，排序表里只余 326° 最大间隙被排除、
+            // 其余差值全 ≤1.5° ⇒ 误判均匀而放行）。按弧序后该步如实计入。
+            var count = angles.Count;
+            double maxSpan = 0, secondSpan = 0, sumSpan = 0;
+            var prev = angles[gapIndex % count];
+            for (var i = 1; i < count; i++)
+            {
+                var cur = angles[(gapIndex + i) % count];
+                if (cur < prev) cur += 2 * Math.PI;   // 跨 0° 回绕
+                var span = cur - prev;
+                if (span > maxSpan)
+                {
+                    secondSpan = maxSpan;
+                    maxSpan = span;
+                }
+                else if (span > secondSpan)
+                {
+                    secondSpan = span;
+                }
+
+                sumSpan += span;
+                prev = cur;
+            }
+
+            // 判据是**离群**而非单纯离散：伪链的相邻顶点步有 1–2 个极端离群值（长弦步），
+            // 真弧链的碎段虽然大小不均（掠射视图 1–2 格混成，最大/均值可达 ~2 倍）但最大步与
+            // 次大步同量级。若只卡「最大 ≤ k × 均值」，掠射视图的真弧链会被伪拒（DrilledPlate
+            // 左视实测：退回 205 段碎片、全圆弧消失）；加「最大 > 1.8 × 次大」离群判据后两者可分。
+            var meanSpan = sumSpan / (count - 1);
+            if (maxSpan > 2.2 * Math.Max(meanSpan, 1e-12)
+                && maxSpan > 1.8 * Math.Max(secondSpan, 1e-12))
+                return false;
         }
 
         var sweep = 2 * Math.PI - largestGap;

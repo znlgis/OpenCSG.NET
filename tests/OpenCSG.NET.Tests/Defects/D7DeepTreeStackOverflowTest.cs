@@ -1,80 +1,90 @@
 using System;
 using System.Text.Json;
-using System.Threading;
 using Csg;
 using NUnit.Framework;
 
 namespace Csg.Test
 {
     /// <summary>
-    /// DEFECT-007 复现（登记于 tests/DEFECTS.md 未修复表；Plan C 只报告不修）。
+    /// DEFECT-007 回归（2026-10-14 修复；登记于 tests/DEFECTS.md 已修复表）。
     /// <para>
-    /// <b>写出路径没有独立深度守卫</b>：<c>CsgNodeConverter.Write</c> 对 <c>child</c> 逐层递归下钻
-    /// （<c>JsonSerializer.Serialize</c> → 转换器 <c>Write</c> → 再 <c>Serialize</c>，每层新起 writer），
-    /// 唯一深度防线是 System.Text.Json writer 的 64 层上限，且要递归回卷合并时才可能触发
-    /// ⇒ 下钻**先于**守卫耗尽栈：深树触发 <b>StackOverflow——进程级中止，任何 try/catch 都接不住</b>。
-    /// 读路径 <c>FromJson</c> 有 64 层守卫，所以「深度守卫先于栈耗尽」只对 JSON 输入向量与
-    /// ≤~100 层写出向量成立（见 SerializationContractTest 类注释的限缩说明）。
+    /// 原缺陷：写出路径（<c>CsgNodeConverter.Write</c>）逐层递归下钻且**无独立深度守卫**——
+    /// 唯一防线是 System.Text.Json writer 的嵌套上限，要到递归回卷合并时才可能触发，
+    /// 于是默认栈下 ≳1020 层树的 <c>ToJson</c> ⇒ StackOverflow（进程级中止、不可捕获）。
     /// </para>
     /// <para>
-    /// 独立进程探针（<c>artifacts/planC/soProbe</c>，gitignored，Release；一次读数 = 一个全新进程）实测：
-    /// 默认栈主线程崩溃边界 ≈1020–1030 层（n≤1010 稳定可捕获 JsonException 3/3、n≥1030 稳定 SO 3/3；
-    /// 1020–1029 因 JIT/OSR 抖动不定——n=1028 复跑得 1×JSONEX + 3×SO）；阈值随栈容量近线性放大
-    /// （每层 ≈1.5 KB：1 MB 线程边界 ≈660–690、4 MB ≈2850、8 MB ≈5600–5750）。
-    /// </para>
-    /// <para>
-    /// <b>2000 级崩溃 repro（需独立进程验证，测试宿主内不可捕获）</b>：主线程
-    /// <c>ToJson(DeepTree(2000))</c> ⇒ 进程中止（exit 127、stderr「Stack overflow.」，无异常可捕）；
-    /// 同一棵树在 8 MB 栈线程上 3/3 稳定得到可捕获的 JsonException（8 MB 边界 ≈5600–5750
-    /// ⇒ 留 ~2.8× 余量）。本用例断言的就是后者——与崩溃 repro **同深**的最深可捕获一侧；
-    /// 异常链与 n=63 相同：<c>JsonException[The object or value could not be serialized. Path: $.Child.]
-    /// ← InvalidOperationException[CurrentDepth (64) is equal to or larger than the maximum allowed
-    /// depth of 64. Cannot write the next JSON object or array.]</c>。
+    /// 修复：<c>CsgNodeConverter</c> 加 [ThreadStatic] 写出深度计数，**下钻前**检查；
+    /// 阈值 63 与「修复前可成功写出的最深树」精确对齐（62 层 Transform + Box = 63 节点，
+    /// JSON 文本深 64；63 层起修复前本就抛 JsonException）⇒ 所有既有可写出树行为不变，
+    /// 更深树以可捕获的 JsonException 收敛。读路径 <c>FromJson</c> 的 64 层守卫保持不变。
     /// </para>
     /// </summary>
     [TestFixture]
     public class D7DeepTreeStackOverflowTest
     {
-        /// <summary>与崩溃 repro 相同的树深（默认栈主线程下实测进程中止，见类注释）。</summary>
-        const int CrashReproDepth = 2000;
+        /// <summary>
+        /// 修复前的进程中止 repro：默认栈主线程 <c>ToJson(DeepTree(2000))</c> 实测 StackOverflow
+        /// （exit 127、stderr「Stack overflow.」）。修复后同一张树在**默认栈**上即以可捕获的
+        /// JsonException 收敛——本用例直接在当前线程断言这一点。
+        /// </summary>
+        [Test]
+        public void ToJson_DeepTree_ThrowsCatchableJsonException_NotStackOverflow()
+        {
+            var ex = Assert.Throws<JsonException>(() => CsgSerialization.ToJson(DeepTree(2000)),
+                "2000 层树应抛可捕获的 JsonException；进程中止（StackOverflow）即修复回退");
+            Assert.That(ex!.Message, Does.Contain("depth"),
+                "守卫消息应点明写出侧深度上限（write depth guard）");
+        }
 
         /// <summary>
-        /// 断言线程显式栈容量：8 MB ⇒ 实测边界 ≈5600–5750 层，2000 层留 ~2.8× 余量，
-        /// 跨机器 JIT/OSR 抖动下安全；同时与测试宿主默认栈解耦（宿主线程默认 ≈1.5 MB，边界 ≈1020）。
+        /// 边界与修复前对齐：63 节点链（62 层 Transform + Box，JSON 文本深 64）仍可写出并往返；
+        /// 64 节点（63 层 Transform + Box）抛 JsonException。
         /// </summary>
-        const int AssertionStackBytes = 8 * 1024 * 1024;
-
         [Test]
-        [Explicit("DEFECT-007: 深树 ToJson 无写出侧深度守卫——默认栈 ≳1020 层进程中止（StackOverflow 不可捕获）；本用例在显式 8 MB 栈线程上断言 2000 层树的最深可捕获侧")]
-        public void ToJson_DeepTree_WithAdequateStack_ThrowsCatchableJsonException()
+        public void ToJson_AtNodeDepthBoundary_63Writes_64Throws()
         {
-            Exception caught = null!;
-            var thread = new Thread(() =>
+            var deepest = CsgSerialization.ToJson(DeepTree(62), indented: false);
+            var restored = CsgSerialization.FromJson(deepest);
+            var node = restored;
+            for (var i = 0; i < 62; i++)
             {
-                try
-                {
-                    _ = CsgSerialization.ToJson(DeepTree(CrashReproDepth));
-                }
-                catch (Exception ex)
-                {
-                    caught = ex;
-                }
-            }, AssertionStackBytes);
+                Assert.That(node, Is.TypeOf<TransformNode>(), $"第 {i} 层应为 Transform");
+                node = ((TransformNode)node).Child;
+            }
+            Assert.That(node, Is.TypeOf<BoxNode>(), "最内层应为 Box（最深可写出形态往返无损）");
 
-            thread.Start();
-            thread.Join();
+            Assert.Throws<JsonException>(() => CsgSerialization.ToJson(DeepTree(63), indented: false),
+                "64 节点链应抛 JsonException（修复前为 writer 64 层上限、修复后为写出侧守卫）");
+        }
 
-            Assert.That(caught, Is.Not.Null,
-                "8 MB 栈下 2000 层树应完成下钻并抛守卫异常；为 null 说明行为已漂移（预期仍抛 JsonException）");
-            Assert.That(caught, Is.TypeOf<JsonException>(),
-                "应为可捕获的 JsonException（64 层 writer 深度上限），而非进程中止或其他异常类型");
-            Assert.That(caught!.Message, Does.Contain("serialized").Or.Contain("depth"),
-                "外层消息应点明序列化失败（与 SerializationContractTest 的既有断言同口径）");
+        /// <summary>
+        /// 守卫失败后深度计数必须复位（[ThreadStatic] 计数在 finally 中递减）：
+        /// 同一线程上先做一次深树失败，再做正常写出——若计数泄漏，第二次会误报。
+        /// 同时断言线程隔离：另一线程的深树失败不影响本线程的正常写出。
+        /// </summary>
+        [Test]
+        public void WriteDepthCounter_ResetsAfterFailure_AndIsThreadLocal()
+        {
+            Assert.Throws<JsonException>(() => CsgSerialization.ToJson(DeepTree(2000), indented: false));
 
-            var inner = caught.InnerException;
-            Assert.That(inner, Is.Not.Null, "异常链应携带内层守卫信息（DEFECT-007 归因依据）");
-            Assert.That(inner!.Message, Does.Contain("64"),
-                "内层消息应点明 64 层深度上限（CurrentDepth (64) … maximum allowed depth of 64）");
+            // 同一线程：计数已复位。
+            var ok = CsgSerialization.ToJson(DeepTree(62), indented: false);
+            Assert.That(ok, Is.Not.Null.And.Not.Empty, "深树失败后同线程的正常写出应不受影响（计数已复位）");
+
+            // 另一线程：并行的深树失败不影响本线程。
+            Exception otherThreadError = null!;
+            var other = new System.Threading.Thread(() =>
+            {
+                try { CsgSerialization.ToJson(DeepTree(2000), indented: false); }
+                catch (Exception caught) { otherThreadError = caught; }
+            });
+            other.Start();
+            other.Join();
+
+            Assert.That(otherThreadError, Is.TypeOf<JsonException>(),
+                "另一线程的深树也应抛可捕获 JsonException（计数按线程隔离）");
+            Assert.DoesNotThrow(() => CsgSerialization.ToJson(DeepTree(62), indented: false),
+                "另一线程的深树失败不得污染本线程的写出深度计数");
         }
 
         static CsgNode DeepTree(int depth)

@@ -188,6 +188,19 @@ namespace Csg
 
     sealed class CsgNodeConverter : JsonConverter<CsgNode>
     {
+        /// <summary>
+        /// 写出侧深度守卫（DEFECT-007 修复）：转换器对 child 逐层递归下钻，超过该节点链层数即在
+        /// **下钻前**抛可捕获的 <see cref="JsonException"/>（不进入更深递归，杜绝 StackOverflow 进程级中止）。
+        /// 阈值 63 的来历：任意形状节点树的 JSON 文本嵌套深度 ≥ 节点链层数 + 1，而 System.Text.Json 的
+        /// 写出/读入嵌套上限为 64（读路径 FromJson 守卫同值）；实测「修复前可写出的最深形态」为
+        /// 62 层 Transform + Box = 63 节点（文本深 64，可往返），63 层 Transform + Box 起本就抛
+        /// JsonException ⇒ 取 63 则**所有修复前能成功写出的树行为逐字节不变**，更深树在下钻前收敛。
+        /// </summary>
+        const int MaxWriteNodeDepth = 63;
+
+        [ThreadStatic]
+        static int writeNodeDepth;
+
         public override CsgNode Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             using var doc = JsonDocument.ParseValue(ref reader);
@@ -215,28 +228,46 @@ namespace Csg
 
         public override void Write(Utf8JsonWriter writer, CsgNode value, JsonSerializerOptions options)
         {
-            var typeName = value switch
-            {
-                BoxNode        => "Box",
-                SphereNode     => "Sphere",
-                CylinderNode   => "Cylinder",
-                ConeNode       => "Cone",
-                ExtrudeNode    => "Extrude",
-                WedgeNode      => "Wedge",
-                UnionNode      => "Union",
-                SubtractNode   => "Subtract",
-                IntersectNode  => "Intersect",
-                TransformNode  => "Transform",
-                _ => throw new JsonException($"Unknown CsgNode type: {value.GetType().Name}")
-            };
+            // 写出侧独立深度守卫（DEFECT-007 修复）：在**下钻前**检查，超过即抛可捕获 JsonException，
+            // 不会再进入更深递归 ⇒ 深树不再以 StackOverflow（进程级中止、不可捕获）收敛。
+            // 阈值与「修复前可成功写出的最深树」精确对齐（见 MaxWriteNodeDepth 注释），故所有既有
+            // 可写出树的行为逐字节不变。
+            if (writeNodeDepth >= MaxWriteNodeDepth)
+                throw new JsonException(
+                    $"CsgNode tree depth exceeded the write-side node depth limit of {MaxWriteNodeDepth} "
+                    + "(write depth guard; System.Text.Json JSON nesting limit is 64; symmetric with the FromJson "
+                    + "read guard; see DEFECT-007) — reduce the tree depth and retry.");
 
-            var json = JsonSerializer.Serialize(value, value.GetType(), options);
-            using var doc = JsonDocument.Parse(json);
-            writer.WriteStartObject();
-            writer.WriteString("$type", typeName);
-            foreach (var prop in doc.RootElement.EnumerateObject())
-                prop.WriteTo(writer);
-            writer.WriteEndObject();
+            writeNodeDepth++;
+            try
+            {
+                var typeName = value switch
+                {
+                    BoxNode        => "Box",
+                    SphereNode     => "Sphere",
+                    CylinderNode   => "Cylinder",
+                    ConeNode       => "Cone",
+                    ExtrudeNode    => "Extrude",
+                    WedgeNode      => "Wedge",
+                    UnionNode      => "Union",
+                    SubtractNode   => "Subtract",
+                    IntersectNode  => "Intersect",
+                    TransformNode  => "Transform",
+                    _ => throw new JsonException($"Unknown CsgNode type: {value.GetType().Name}")
+                };
+
+                var json = JsonSerializer.Serialize(value, value.GetType(), options);
+                using var doc = JsonDocument.Parse(json);
+                writer.WriteStartObject();
+                writer.WriteString("$type", typeName);
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                    prop.WriteTo(writer);
+                writer.WriteEndObject();
+            }
+            finally
+            {
+                writeNodeDepth--;
+            }
         }
     }
 }

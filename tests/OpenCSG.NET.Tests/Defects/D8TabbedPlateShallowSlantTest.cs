@@ -6,24 +6,21 @@ using NUnit.Framework;
 namespace Csg.Test
 {
     /// <summary>
-    /// DEFECT-008 最小复现（登记于 tests/DEFECTS.md 未修复表；程序规则：只报告不改 src/）。
+    /// DEFECT-008 回归（2026-10-14 修复；登记于 tests/DEFECTS.md 已修复表）。
     /// <para>
-    /// <b>浅斜角（θ&lt;30°）下肩部矩形欠覆盖</b>：<c>CsgHelpers.TabbedPlate</c> 的肩部只减
-    /// <c>boxUpper</c>（z ∈ [zLeft, zLeft + zT]，zT = R·sinθ，CsgHelpers.cs:169-177）；
-    /// 台面标高（y = yT）处圆盘外的左段需覆盖到 z = zLeft + R − R·sinθ
-    /// ⇒ 覆盖条件 R·sinθ ≥ R − R·sinθ ⇔ <b>θ ≥ 30°</b>。θ&lt;30°（等价 宽 w &gt; 3R + √3·yC）时
-    /// z ∈ [zLeft + R·sinθ, 头部 12 边形面片穿出台面处] 之间「头面片与台面之间」的槽体留料
-    /// —— 圆头左上外侧残留水平平台 + 竖壁台阶（静默错误几何）。
+    /// 原缺陷：浅斜角（θ&lt;30°）肩部矩形欠覆盖 —— 只减到切点 zLeft + R·sinθ，而台面标高
+    /// （y = yT）处圆盘外的左段需覆盖到 zLeft + R − R·sinθ；θ&lt;30° 时 R·sinθ &lt; R − R·sinθ
+    /// ⇒ 圆头左上外侧残留 76.96mm 水平平台 + 竖壁，净体积多 +23,667.62 mm³（≈0.42%），静默无异常。
     /// </para>
     /// <para>
-    /// 本用例钉住**当前（错误）读数**（评审独立探针与本人探针 `artifacts/planD/d8probe` 逐位一致）：
-    /// θ = 10.000772281737618°；水平台面 y = 298.4805412343433 跨 z ∈ [67.3661, 167.3661]
-    /// （外露台阶片 z ∈ [67.36614517360738, 144.32930268656344]）；z = 67.36614517360738 处
-    /// 竖壁 y ∈ [253.96868555205128, 298.4805412343433]；净体积 5,633,605.601992406。
-    /// 期望（文档契约 CsgHelpers.cs:43-44「左直立边 + 顶部 R 圆头 + 与圆头相切的斜边落至右下角 +
-    /// 底边」——无平台/竖壁，顶边界应为圆头弧面/相切斜边）；corrected construction
-    /// （一行修法：肩部跨度 zT → R）体积 5,609,937.983120397，多料 +23,667.618872 mm³（≈0.42%）。
-    /// <c>[Explicit]</c> 使套件保持绿色、缺陷可一行复现（规则 2）；修复后按规则 5 摘标注迁移。
+    /// 修复：肩部跨度改条件式 —— θ&lt;30°（2·zT &lt; R）时覆盖到孔心（跨度 R，与评审独立探针复算的
+    /// corrected 体积 5,609,937.983120397 一致）；θ≥30° 维持切点跨度 zT（既有 θ≈58.6°/70.9° 基线
+    /// 逐字节不变；两域在 θ=30° 处覆盖条件 R·sinθ = R − R·sinθ 恰好连续）。
+    /// </para>
+    /// <para>
+    /// 修复后读数：竖壁消失；平台缩至圆头多边形弦下方的窄残片 z≈[155.67, 167.37]（宽 ≈11.7mm）——
+    /// 该残片是 12 边形圆头近似与台面的固有交叠（同族残片在 θ≥30° 域亦存在，如默认件宽 ≈0.83mm），
+    /// 非覆盖缺失；净体积 5,609,937.983（修前 5,633,605.602）。
     /// </para>
     /// </summary>
     [TestFixture]
@@ -33,68 +30,58 @@ namespace Csg.Test
         const double XCenter = 0, Thickness = 20, ZLeft = 50, Width = 1810;
         const double YBottom = 0, YCenter = 200, HeadRadius = 100, HoleRadius = 40;
 
-        // 当前（错误）读数（Release 实测，见 tests/DEFECTS.md DEFECT-008）。
-        const double SlantAngleDeg = 10.000772281737618;     // 欠覆盖域：< 30°
-        const double FlatDeckY = 298.4805412343433;          // 台面标高；正确构造此处应为圆头弧面
-        const double LedgeZMin = 67.36614517360738;          // 竖壁 z = zLeft + R·sinθ
-        const double LedgeZMax = 144.32930268656344;         // 头部 12 边形面片穿出台面处
-        const double WallYMin = 253.96868555205128;          // 竖壁下沿（头面片处）
-        const double CurrentVolumeMm3 = 5633605.601992406;   // 期望（corrected）：5609937.983120397
+        const double SlantAngleDeg = 10.000772281737618;          // 触发域：θ < 30°
+        const double DeckY = 298.4805412343433;                    // 台面标高 yT
+        const double CorrectedVolumeMm3 = 5609937.983120397;       // 评审 corrected 构造
 
         [Test]
-        [Explicit("DEFECT-008: TabbedPlate 浅斜角 θ<30° 肩部欠覆盖——圆头外侧残留水平平台 + 竖壁（净体积多 23,667.62 mm³）")]
-        public void ShallowSlant_LeavesFlatDeckLedgeAndWall_AndExcessVolume()
+        public void ShallowSlant_PlatformReducedToSliver_NoWall_CorrectedVolume()
         {
-            // 前置：θ < 30°（欠覆盖域边界 θ=30° ⇔ 宽 = 3R + √3·yC ≈ 646.410，本例 1810 远在其上）。
+            // 前置：θ < 30°（修复触发域边界 θ=30° ⇔ 宽 = 3R + √3·yC ≈ 646.410，本例 1810 远在其上）。
             var angle = CsgHelpers.TabbedPlateSlantAngleDeg(Width, YBottom, YCenter, HeadRadius);
             Assert.That(angle, Is.EqualTo(SlantAngleDeg).Within(1e-9),
                 $"斜边角应 ≈10.0008°（θ<30° 即 R·sinθ < R − R·sinθ 欠覆盖域；实际 {angle:R}°）");
-            Assert.That(angle, Is.LessThan(30.0), "DEFECT-008 触发域：θ<30°");
+            Assert.That(angle, Is.LessThan(30.0), "修复触发域：θ<30°");
 
             var solid = CsgEvaluator.Evaluate(CsgHelpers.TabbedPlate(
                 XCenter, Thickness, ZLeft, Width, YBottom, YCenter, HeadRadius, HoleRadius));
 
-            // 包络：X = 厚 ±10、Y 顶 300（圆头顶点 (z=150, y=300) 一个点）、Z ∈ [50, 1860]。
-            // 缺陷台面却在 y≈298.48 上横跨百毫米——下方断言把两者区分开。
+            // 包络不变：X = 厚 ±10、Y 顶 300（圆头顶点）、Z ∈ [50, 1860]。
             GeometryAssert.AssertBounds(solid,
                 new Vector3D(-10, 0, ZLeft), new Vector3D(10, 300, ZLeft + Width), 1e-9,
                 "DEFECT-008 前置：实体包络");
 
-            // (1) 水平台面（错误读数）：+Y 法向、y≈298.4805412343433 的水平面片共 2 片
-            //     （外露台阶片 + 圆头右侧残留小片）；正确构造两片都不应存在（顶边界应为圆头弧面）。
+            // (1) 台面（修复后）：仅剩圆头多边形（12 边形）上弦低于台面的窄残片 ——
+            //     z ∈ [155.6707, 167.3661]（宽 ≈11.7mm，弦与台面交点至切点）。
+            //     原 76.96mm 外露台阶（z ∈ [67.37, 144.33]）被消除。
             var deckFaces = solid.Polygons
                 .Where(p => Math.Abs(p.Plane.Normal.Y - 1.0) < 1e-9
-                    && p.Vertices.All(v => Math.Abs(v.Pos.Y - FlatDeckY) < 1e-6))
-                .OrderBy(p => p.Vertices.Min(v => v.Pos.Z))
+                    && p.Vertices.All(v => Math.Abs(v.Pos.Y - DeckY) < 1e-6))
                 .ToList();
-            Assert.That(deckFaces.Count, Is.EqualTo(2),
-                "DEFECT-008 实际读数：台面高度水平面片 2 片（期望 0 片——正确构造为圆头弧面/相切斜边）");
-            var ledge = deckFaces[0];
-            Assert.That(ledge.Vertices.Min(v => v.Pos.Z), Is.EqualTo(LedgeZMin).Within(1e-6),
-                "DEFECT-008 实际读数：外露台阶起点 z = 竖壁 z = zLeft + R·sinθ ≈ 67.3661");
-            Assert.That(ledge.Vertices.Max(v => v.Pos.Z), Is.EqualTo(LedgeZMax).Within(1e-6),
-                "DEFECT-008 实际读数：外露台阶终点 z ≈ 144.3293（头面片穿出台面处）");
-            Assert.That(ledge.Vertices.Max(v => v.Pos.Z) - ledge.Vertices.Min(v => v.Pos.Z),
-                Is.GreaterThan(75.0),
-                "DEFECT-008：台阶跨度 ≈ 76.96 mm（远大于面片宽度，不是数值噪声）");
+            Assert.That(deckFaces.Count, Is.EqualTo(1),
+                "修复后：台面仅剩圆头多边形弦下的窄残片 1 片（修复前为 2 片含 76.96mm 外露台阶）");
+            var sliver = deckFaces[0];
+            Assert.That(sliver.Vertices.Min(v => v.Pos.Z), Is.EqualTo(155.67069731343656).Within(1e-2),
+                "残片起点 z ≈ 155.6707（12 边形圆头上弦与台面标高的交点；修复前外露台阶起点 ≈67.3661）");
+            Assert.That(sliver.Vertices.Max(v => v.Pos.Z), Is.EqualTo(167.36614517360613).Within(1e-2),
+                "残片终点 z ≈ 167.3661 = 切点 z（孔心 zc + zT；修复前台阶终点 ≈144.3293）");
+            Assert.That(sliver.Vertices.Max(v => v.Pos.Z) - sliver.Vertices.Min(v => v.Pos.Z),
+                Is.LessThan(12.0),
+                "残片宽度 ≈11.7mm，为圆头多边形近似与台面的固有交叠（同族残片在 θ≥30° 基线亦存在）");
 
-            // (2) 竖壁（错误读数）：z≈67.3661 的竖直面片，y 从台面直落到头面 ≈253.9687。
+            // (2) 竖壁消失：z ≈ 67.3661（修前台阶竖壁 z = zLeft + R·sinθ）不得存在竖直面片。
             var wallFaces = solid.Polygons
                 .Where(p => Math.Abs(Math.Abs(p.Plane.Normal.Z) - 1.0) < 1e-9
-                    && p.Vertices.All(v => Math.Abs(v.Pos.Z - LedgeZMin) < 1e-6))
+                    && p.Vertices.All(v => Math.Abs(v.Pos.Z - 67.36614517360738) < 1e-6))
                 .ToList();
-            Assert.That(wallFaces.Count, Is.EqualTo(1),
-                "DEFECT-008 实际读数：z≈67.3661 竖壁 1 片（期望 0 片——正确构造圆弧连续过渡）");
-            var wall = wallFaces[0];
-            Assert.That(wall.Vertices.Min(v => v.Pos.Y), Is.EqualTo(WallYMin).Within(1e-6),
-                "DEFECT-008 实际读数：竖壁下沿 y ≈ 253.9687（头面片处）");
-            Assert.That(wall.Vertices.Max(v => v.Pos.Y), Is.EqualTo(FlatDeckY).Within(1e-6),
-                "DEFECT-008 实际读数：竖壁上沿 y = 台面标高 298.4805");
+            Assert.That(wallFaces.Count, Is.EqualTo(0),
+                "修复后：修复前的 z≈67.3661 竖壁（1 片）应消失（圆头弧面连续过渡）");
 
-            // (3) 净体积（错误读数）：比 corrected construction（肩部跨度 zT → R，一行修法）多
-            //     +23,667.618872 mm³（≈0.42%）；期望 5,609,937.983120397（评审独立探针 +23,667.62 一致）。
-            GeometryAssert.AssertVolume(solid, CurrentVolumeMm3, 1e-6,
-                "DEFECT-008 实际读数：净体积（期望 corrected = 5,609,937.983120397，多料 +23,667.62）");
+            // (3) 净体积 = corrected 构造（θ<30° 时肩部覆盖到孔心；评审独立探针复算逐位一致）。
+            //     修复前读数 5,633,605.601992406（多料 +23,667.62）；容差取 1e-3（整数级信号量级
+            //     为 2.4e4，且为跨平台 libm ULP 留余量）。
+            GeometryAssert.AssertVolume(solid, CorrectedVolumeMm3, 1e-3,
+                "修复后：净体积 = corrected 构造（实测 5,609,937.983120362，与评审值差 3.5e-8）");
         }
     }
 }

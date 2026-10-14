@@ -31,11 +31,13 @@ namespace Csg.Test
             var segments = PerfWorkloads.Segments(16000);
             Assert.That(segments.Count, Is.EqualTo(16000));
 
-            // 非空转守卫：识别出的弧/保留折线实测（16000 段 ⇒ 524 弧 / 12587 折线段）。
+            // 非空转守卫：识别出的弧/保留折线实测（16000 段 ⇒ 516 弧 / 12613 折线段；
+            // 演进：524/12587（修前）→ 523/12589（DEFECT-004 成链取向）→ 516/12613
+            //（DEFECT-012 角步离群守卫再拒掉 7 条跨长弦的窗拟合弧））。
             var curves = ViewArcFitter.Fit(segments);
-            Assert.That(curves.Arcs.Count, Is.EqualTo(524), $"识别弧数实测 {curves.Arcs.Count}（钉值 524）");
-            Assert.That(curves.Segments.Count, Is.EqualTo(12587),
-                $"保留折线段实测 {curves.Segments.Count}（钉值 12587）");
+            Assert.That(curves.Arcs.Count, Is.EqualTo(516), $"识别弧数实测 {curves.Arcs.Count}（钉值 516）");
+            Assert.That(curves.Segments.Count, Is.EqualTo(12613),
+                $"保留折线段实测 {curves.Segments.Count}（钉值 12613）");
 
             // 计时口径 = 工具侧套件同款（连续 5 轮 Fit），抵单轮 ≈6ms 的噪声。
             var measured = BudgetClock.MinMs(3, 5, () => ViewArcFitter.Fit(segments));
@@ -57,16 +59,20 @@ namespace Csg.Test
             var trees = PerfWorkloads.DeepTrees();
             Assert.That(trees.Count, Is.EqualTo(8));
 
-            // 非空转守卫 + 确定性读数：8 棵树（深度 5）求值后的多边形总数 —— Windows 实测 518、
-            // ubuntu 第三跑（run 38514979215）实测 517（DEFECT-011：布尔求值的面数记账在平台 libm
-            // ULP 差下 ±1 级浮动，两平台输出同为同一几何的有效近似）。故钉窄带 515..521（两侧各留
-            // 3 格 ≈ ±0.6%：容纳平台浮动，仍能抓空转 0、树缺失/求值失败与量级级回归）；本用例核心
+            // 非空转守卫 + 确定性读数：8 棵树（深度 5）求值后的多边形总数。
+            // DEFECT-002 修复前实测 Windows 518 / ubuntu 第三跑 517；修复后实测 491（-27）。
+            // 差量已探针定位（artifacts/fixround/defect002probe）：tree[6] 的
+            // Intersect(54,57,38) 子树几何两两不相交（求值为空集）—— 修复前 ∅∩X 静默返回 X
+            // （该结点实测读数 = 第三个操作数自身的 38 面），修复后空集正确传播（0，其余部分
+            // 由上游伪多边形消失带来的 ±1 级重剖分差补齐）。属 DEFECT-011 同域（布尔求值的
+            // 面数记账在平台 libm ULP 差下 ±1 级浮动）⇒ 钉 488..494（实测 491 两侧各留 3 格
+            // ≈ ±0.6%：容纳平台浮动，仍能抓空转 0、树缺失/求值失败与量级级回归）；本用例核心
             // 是下方墙钟预算（保持精确）。
             var polygons = 0;
             foreach (var tree in trees)
                 polygons += CsgEvaluator.Evaluate(tree).Polygons.Count;
-            Assert.That(polygons, Is.InRange(515, 521),
-                $"8 棵深树求值多边形总数实测 {polygons}（DEFECT-011 稳健带 515..521；Windows 518 / ubuntu 517）");
+            Assert.That(polygons, Is.InRange(488, 494),
+                $"8 棵深树求值多边形总数实测 {polygons}（DEFECT-002 修复后口径 + DEFECT-011 稳健带 488..494；修复前 Windows 518）");
 
             // 计时口径 = 工具套件 Evaluate 项同款（一趟 = 依序求值 8 棵树；其中 seed 3/6 各 ≈45ms）。
             var measured = BudgetClock.MinMs(3, 1, () =>

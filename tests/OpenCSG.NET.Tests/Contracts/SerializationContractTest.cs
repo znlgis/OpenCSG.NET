@@ -10,14 +10,12 @@ namespace Csg.Test
     /// null 字面量拒绝、未知节点/截面类型的写出拒绝、超递归深度的 JsonException 守卫，
     /// 以及中等深度的往返对照。
     /// <para>
-    /// 超深输入的实测结论（探针，一次性）：默认序列化深度上限 64 —— FromJson 深度 100 抛
-    /// JsonException「The maximum configured depth of 64 has been exceeded」；ToJson 在深度 63
-    /// （62 层 Transform 包 Box）即抛 JsonException、深度 62 仍可往返。**对本夹具的 JSON 输入
-    /// 向量与 100 层写出向量，深度守卫先于栈耗尽生效**（实测可捕获、可断言）；该结论**不可外推**到
-    /// 程序构造的更深树写出：写出路径（<c>CsgNodeConverter.Write</c>）逐层递归、没有独立深度守卫，
-    /// 深树（默认栈 ≳1020 层）先栈耗尽 ⇒ 不可捕获的 StackOverflow（进程中止）。
-    /// 该单向守卫残留风险已登记为 DEFECT-007（tests/DEFECTS.md；复现与探针读数见
-    /// <c>Defects/D7DeepTreeStackOverflowTest.cs</c>）。
+    /// 深度守卫（DEFECT-007 已修复，2026-10-14）：读路径 FromJson 依赖 System.Text.Json 的 64 层
+    /// 嵌套上限（超限抛 JsonException「The maximum configured depth of 64 has been exceeded」）；
+    /// 写路径由 <c>CsgNodeConverter</c> 的独立深度守卫（阈值 63 节点）在下钻前抛 JsonException。
+    /// 两条路径对深输入均以可捕获异常收敛、两条守卫先于栈耗尽生效——**原「不可外推到深树写出」的
+    /// 限缩已解除**：修复前 ≳1020 层写出为 StackOverflow（进程级中止），修复后为可捕获 JsonException
+    /// （边界实测见 <c>Defects/D7DeepTreeStackOverflowTest.cs</c>）。
     /// </para>
     /// </summary>
     [TestFixture]

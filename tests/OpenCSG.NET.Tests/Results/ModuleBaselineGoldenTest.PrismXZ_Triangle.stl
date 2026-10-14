@@ -1,54 +1,54 @@
 solid PrismXZ_Triangle
-facet normal 0 1 0
+facet normal 0 1 -6.123233995736766E-17
 outer loop
 vertex 0 2.0000000000000004 5
 vertex 12 2 0
 vertex 0 2 0
 endloop
 endfacet
-facet normal 0 -1 0
+facet normal 0 -1 6.123233995736766E-17
 outer loop
 vertex 0 -2 2.4492935982947064E-16
 vertex 12 -2 2.4492935982947064E-16
 vertex 0 -1.9999999999999996 5
 endloop
 endfacet
-facet normal -0 -6.123233995736766E-17 -1
+facet normal 0 -6.123233995736766E-17 -1
 outer loop
 vertex 0 2 0
 vertex 12 2 0
 vertex 12 -2 2.4492935982947064E-16
 endloop
 endfacet
-facet normal -0 -6.123233995736766E-17 -1
+facet normal 0 -6.123233995736766E-17 -1
 outer loop
 vertex 0 2 0
 vertex 12 -2 2.4492935982947064E-16
 vertex 0 -2 2.4492935982947064E-16
 endloop
 endfacet
-facet normal 0.3846153846153842 0 0.9230769230769232
+facet normal 0.38461538461538464 5.652215996064708E-17 0.9230769230769231
 outer loop
 vertex 12 2 0
 vertex 0 2.0000000000000004 5
 vertex 0 -1.9999999999999996 5
 endloop
 endfacet
-facet normal 0.3846153846153842 0 0.9230769230769232
+facet normal 0.38461538461538464 5.652215996064708E-17 0.9230769230769231
 outer loop
 vertex 12 2 0
 vertex 0 -1.9999999999999996 5
 vertex 12 -2 2.4492935982947064E-16
 endloop
 endfacet
-facet normal -1 -0 -0
+facet normal -1 0 0
 outer loop
 vertex 0 2.0000000000000004 5
 vertex 0 2 0
 vertex 0 -2 2.4492935982947064E-16
 endloop
 endfacet
-facet normal -1 -0 -0
+facet normal -1 0 0
 outer loop
 vertex 0 2.0000000000000004 5
 vertex 0 -2 2.4492935982947064E-16

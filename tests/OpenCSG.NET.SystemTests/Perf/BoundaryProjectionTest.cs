@@ -46,34 +46,35 @@ namespace Csg.Test
             var top = Named(views, "俯视");
             var left = Named(views, "左视");
 
-            // ① 主视/俯视：0.01mm 凸台**无任何痕迹**（丢边）。
-            // 实测：主视 5 段（4V+1H，hiddenLen 998.891626）；俯视 5 段（4V+1H，hiddenLen 1000.000000）。
+            // ① 主视/俯视：0.01mm 凸台无任何痕迹（丢边）。
+            // 实测：主视 5 段（4V+1H，hiddenLen 998.891626）；俯视 5 段（4V+1H，hiddenLen 100.000000，
+            // DEFECT-010 修复前为 1000.000000 —— 那条 1000mm 隐藏读数里 900mm 是分解缝幻线）。
             // 凸台的外露轮廓本应在 h=−10.01 处留下 v∈[−50,50] 的 100mm 线，但被
             // ViewSegmentCleanup 的长度阈值（对角 1414mm×1e-4 = 0.1414mm）先丢弃、凸台上表面的
             // 轮廓线与板轮廓（h=−10）只差 0.01mm ≪ 共线合并容差（阈值×4 = 0.566mm）而被并入板轮廓
             // —— 与 DEFECT-004/005 族同源：亚像素/亚阈值特征在栅格与清理量化下整体消失（此处是清理端）。
             AssertViewPin(front, viewName: "主视", expectedVisible: 4, expectedHidden: 1, expectedHiddenLength: 998.8916);
-            AssertViewPin(top, viewName: "俯视", expectedVisible: 4, expectedHidden: 1, expectedHiddenLength: 1000.0);
+            AssertViewPin(top, viewName: "俯视", expectedVisible: 4, expectedHidden: 1, expectedHiddenLength: 100.0);
             AssertOnOutlineOnly(front, viewName: "主视", outlineH: ThinPlateThicknessHalf);
             AssertOnOutlineOnly(top, viewName: "俯视", outlineH: ThinPlateThicknessHalf);
 
-            // ② 左视（沿板厚方向看）：凸台可见（足迹 ±50 的两条 100mm 线），但 Union 的分解缝
-            //    在 ±50 处留下**贯穿整板的 1000mm 可见幻线**（实测 2 条；每条约 450mm 落在凸台
-            //    足迹之外 —— 凭空墨线）—— 这是网格拓扑伪影（CSG 求值把板的大面按凸台足迹切成
-            //    多片、T 接缝在三角汤里成为单侧边 ⇒ 投影器按「边界边」放行、投影为可见实线），
-            //    与 DEFECT-004/005 的栅格量化无关，已登记为 **DEFECT-010**（只报告）；
-            //    此钉即其可执行读数，防被当成同族问题漏掉。
-            //    实测：10 段（8V+2H），hiddenLen 198.790111。
-            AssertViewPin(left, viewName: "左视", expectedVisible: 8, expectedHidden: 2, expectedHiddenLength: 198.7901);
+            // ② 左视（沿板厚方向看）：凸台可见（足迹 ±50 的 100mm 线 4 条），分解缝幻线已由
+            //    DEFECT-010 修复剔除（修复前：±50 处各 1 条贯穿整板 1000mm 可见幻线，seams=2）。
+            //    修复口径：T 接缝单侧边按**共面覆盖**识别为内部边剔除，共线下与覆盖方不共面的
+            //    真实棱线（板顶角线等）原样保留 —— 本视图实测板轮廓 4 条 1000mm 线完整（见下方
+            //    AssertViewPin 计数与 seams=0）。旧读数 8V+2H / hiddenLen 198.790111 相应变为
+            //    8V+2H / hiddenLen 197.802198（共线可见段盖掉的隐藏余段随之缩短），
+            //    足迹线由 2 条并入幻线状态恢复为完整 4 条。
+            AssertViewPin(left, viewName: "左视", expectedVisible: 8, expectedHidden: 2, expectedHiddenLength: 197.802198);
 
             var seams = left.Segments.Count(s => s.IsVisible && s.Length > 999.9
                 && Math.Abs(Math.Abs(s.Start.Y) - 50.0) < 0.05);
-            Assert.That(seams, Is.EqualTo(2),
-                $"左视 ±50 处贯穿整板（1000mm）的分解缝线实测 {seams} 条（钉值 2）");
+            Assert.That(seams, Is.EqualTo(0),
+                $"左视 ±50 处贯穿整板（1000mm）的分解缝线实测 {seams} 条（DEFECT-010 修复后应为 0）");
 
             var footprint = left.Segments.Count(s => s.IsVisible && Math.Abs(s.Length - 100.0) < 0.05);
-            Assert.That(footprint, Is.EqualTo(2),
-                $"左视凸台足迹（100mm 竖线）实测 {footprint} 条（钉值 2）");
+            Assert.That(footprint, Is.EqualTo(4),
+                $"左视凸台足迹（100mm 线，足迹方形四边）实测 {footprint} 条（修复前 2 —— 另两条被幻线吸收）");
 
             // ③ 不挂起预算：三视图 ×10 轮（实测 36.3ms，min of 5 采样）。
             var measured = BudgetClock.MinMs(3, 10,
@@ -113,26 +114,33 @@ namespace Csg.Test
             AssertSamplePin(triangles, ViewDirections.Left, viewName: "左视", expectedCandidates: 19, expectedMaxSamples: 901);
 
             // ② 实际投影：不挂起 + 拓扑计数实测钉。
-            //    主视/左视 6 段（3V+3H，hiddenLen 2000866.025 —— 两条 1e6 轴向棱的远侧全藏 + 端盖弦）；
-            //    俯视（轴向视图）0 段并识别出 1 条 330° 开口弧（R=500，非整圆）。
+            //    主视/左视 7 段（5V+2H，hiddenLen 2000000.000 —— 两条 1e6 轴向棱的远侧全藏；
+            //    DEFECT-004/005 修复前为 6 段（3V+3H，2000866.025：端盖缘弦的隐藏半段已并入可见侧/
+            //    被弧吸收））；俯视（轴向视图）0 段并识别出 1 条**整圆**（R=500）。
             var projector = new ViewProjector(triangles);
 
             var front = projector.ProjectView(ViewDirections.Front);
-            AssertViewPin(front, viewName: "主视", expectedVisible: 3, expectedHidden: 3, expectedHiddenLength: 2000866.025);
+            AssertViewPin(front, viewName: "主视", expectedVisible: 5, expectedHidden: 2, expectedHiddenLength: 2000000.0);
 
             var top = projector.ProjectView(ViewDirections.Top);
             Assert.That(top.Segments.Count, Is.EqualTo(0), "俯视（轴向）实测 0 段（钉值）");
             Assert.That(top.Arcs.Count, Is.EqualTo(1), "俯视识别出 1 条弧（钉值）");
             Assert.That(top.Arcs[0].Radius, Is.EqualTo(500.0).Within(0.01), "弧半径 = 圆柱半径（钉值 500）");
-            Assert.That(top.Arcs[0].SweepDegrees, Is.EqualTo(330.0).Within(0.5),
-                "弧扫掠实测 330°（12 边形端盖弦只补到 330°，钉值）");
-            Assert.That(top.Arcs[0].IsClosed, Is.False, "非整圆（钉值；DEFECT-004 族现象）");
-            Assert.That(top.Bounds.Width, Is.EqualTo(0.0).Within(1e-9),
-                "俯视包络读 (0,0,0,0) ——「全弧视图」包络退化哨兵，即 DEFECT-009（只报告）；"
-                + "若该缺陷被修复，此钉必须重钉为 ≈(−500,−500)–(500,500)");
+            // DEFECT-004 机制①修复后重钉：成链取向携带后整圈闭合 —— 修复前 330°（缺 30° > 25° 补圆阈）。
+            Assert.That(top.Arcs[0].SweepDegrees, Is.EqualTo(360.0).Within(0.5),
+                "弧扫掠实测 360°（整圆，钉值；修复前 330° 开口弧）");
+            Assert.That(top.Arcs[0].IsClosed, Is.True, "整圆（DEFECT-004 机制①修复后）");
+            // DEFECT-009 修复后的重钉：包络并入弧极值 —— 整圆（修复前 330° 开口弧也含全部四个
+            // 象限极值点）⇒ Bounds = 全圆外接盒 (−500,−500)–(500,500)，口径不变。
+            Assert.That(top.Bounds.Width, Is.EqualTo(1000.0).Within(1e-9), "俯视包络宽 = 2R（弧极值并入）");
+            Assert.That(top.Bounds.Height, Is.EqualTo(1000.0).Within(1e-9), "俯视包络高 = 2R（弧极值并入）");
+            Assert.That(top.Bounds.MinX, Is.EqualTo(-500.0).Within(1e-9), "俯视包络 MinX = −R");
+            Assert.That(top.Bounds.MaxX, Is.EqualTo(500.0).Within(1e-9), "俯视包络 MaxX = +R");
+            Assert.That(top.Bounds.MinY, Is.EqualTo(-500.0).Within(1e-9), "俯视包络 MinY = −R");
+            Assert.That(top.Bounds.MaxY, Is.EqualTo(500.0).Within(1e-9), "俯视包络 MaxY = +R");
 
             var left = projector.ProjectView(ViewDirections.Left);
-            AssertViewPin(left, viewName: "左视", expectedVisible: 3, expectedHidden: 3, expectedHiddenLength: 2000866.025);
+            AssertViewPin(left, viewName: "左视", expectedVisible: 5, expectedHidden: 2, expectedHiddenLength: 2000000.0);
 
             // ③ 不挂起预算：三视图 ×10 轮（实测 33.9ms，min of 5 采样）。
             var measured = BudgetClock.MinMs(3, 10,
@@ -244,13 +252,17 @@ namespace Csg.Test
             var cell = Math.Max(sizeH, sizeV) / ViewProjector.RasterResolution;
             if (cell <= 0) cell = 1e-6;
 
+            var boundaryEdges = 0;
             var candidates = 0;
             var maxSamples = 0;
             foreach (var edge in mesh.Edges)
             {
                 var candidate = false;
                 if (edge.TriB < 0)
-                    candidate = true;   // 边界边（单侧引用）：投影器无条件放行
+                {
+                    boundaryEdges++;
+                    candidate = true;   // 边界边（单侧引用）：投影器按分解缝识别后的保留区间放行（DEFECT-010）
+                }
                 else
                 {
                     var frontA = frontFacing[edge.TriA];
@@ -271,6 +283,12 @@ namespace Csg.Test
                 if (samples > ViewProjector.MaxEdgeSamples) samples = ViewProjector.MaxEdgeSamples;
                 if (samples > maxSamples) maxSamples = samples;
             }
+
+            // 复刻简化：DEFECT-010 修复后，边界边要经「共面覆盖分解缝」识别后才放行（实现私有逻辑），
+            // 本复刻未含该判定 ⇒ 只对**水密网格**（边界边数 0）成立。夹具出现边界边时复刻口径失效，
+            // 须同步实现口径后重钉（此处立刻判红，防静默漂移）。
+            Assert.That(boundaryEdges, Is.EqualTo(0),
+                $"复刻前提失效：该网格有 {boundaryEdges} 条边界边（分解缝剔除逻辑不在复刻内）");
 
             return (candidates, maxSamples);
         }

@@ -17,7 +17,6 @@ namespace Csg.Test
         }
 
         [Test]
-        [Explicit("DEFECT-002: 空操作数的 Subtract/Intersect 语义错误（empty−X 返回反向的 X、empty∩X 返回 X）")]
         public void Random_TreesAreEvaluableAndOutwardFacing()
         {
             var nonEmpty = 0;
@@ -29,6 +28,8 @@ namespace Csg.Test
 
                 // 空结果是**合法**的：不相交的交集、被完全减去的差集都会产出零多边形实体。
                 // 所以不能断言每个种子都非空 —— 只断言「非空 ⇒ 法线朝外」。
+                // （本用例原为 DEFECT-002 复现：空操作数减法会返回绕序翻转的非空实体、体积为负；
+                // 修复后这类树读数为合法空，见 tests/DEFECTS.md 已修复表。）
                 if (solid.Polygons.Count == 0)
                     continue;
 

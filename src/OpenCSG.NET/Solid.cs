@@ -34,7 +34,17 @@ namespace Csg
 
 		public Solid Union (params Solid[] others)
 		{
-			if (others.Length == 0) {
+			var anyNonEmpty = false;
+			for (var i = 0; i < others.Length; i++) {
+				if (others[i].Polygons.Count > 0) {
+					anyNonEmpty = true;
+					break;
+				}
+			}
+			if (!anyNonEmpty) {
+				// 空实体（空集）是 ∪ 的单位元（DEFECT-002 同族修复）：A ∪ ∅ = A —— 与无参 Union 同路。
+				// 短路是必要的：不短路会走「平移到中心 → 空并 → 重剖分/规范化 → 平移回」的往返，
+				// 该往返在 Survey 档（|坐标|≈1e6）下让体积读数漂移（实测最大 0.18 绝对 / 2.4e-8 相对）。
 				return this.Retesselated ().Canonicalized ();
 			}
 
@@ -89,16 +99,30 @@ namespace Csg
 
 		Solid SubtractSub (Solid csg, bool retesselate, bool canonicalize)
 		{
-			var a = new Tree (Bounds, Polygons);
-			var b = new Tree (csg.Bounds, csg.Polygons);
+			// 空操作数短路（DEFECT-002 修复，与 UnionSubLocal 的 MayOverlap 空短路同口径）：空实体 = 空集
+			// ⇒ ∅−X = ∅、X−∅ = X。不短路会走「空 BSP 树取反 = 全空间」的错误路径：∅−X 静默产出
+			// 绕序翻转的 X（有向体积为负、法线朝内）。
+			List<Polygon> newpolygons;
+			if (Polygons.Count == 0) {
+				newpolygons = new List<Polygon> ();
+			}
+			else if (csg.Polygons.Count == 0) {
+				newpolygons = new List<Polygon> (Polygons);
+			}
+			else {
+				var a = new Tree (Bounds, Polygons);
+				var b = new Tree (csg.Bounds, csg.Polygons);
 
-			a.Invert ();
-			a.ClipTo (b);
-			b.ClipTo (a, true);
-			a.AddPolygons (b.AllPolygons ());
-			a.Invert ();
+				a.Invert ();
+				a.ClipTo (b);
+				b.ClipTo (a, true);
+				a.AddPolygons (b.AllPolygons ());
+				a.Invert ();
 
-			var result = Solid.FromPolygons (a.AllPolygons ());
+				newpolygons = a.AllPolygons ();
+			}
+
+			var result = Solid.FromPolygons (newpolygons);
 			if (retesselate)
 				result = result.Retesselated ();
 			if (canonicalize)
@@ -118,18 +142,28 @@ namespace Csg
 
 		Solid IntersectSub (Solid csg, bool retesselate, bool canonicalize)
 		{
-			var a = new Tree (Bounds, Polygons);
-			var b = new Tree (csg.Bounds, csg.Polygons);
+			// 空操作数短路（DEFECT-002 修复）：任一操作数为空实体（空集）⇒ 交集为空集
+			// （∅∩X = X∩∅ = ∅）。不短路会走「空 BSP 树取反 = 全空间」的错误路径：∅∩X 静默返回 X。
+			List<Polygon> newpolygons;
+			if ((Polygons.Count == 0) || (csg.Polygons.Count == 0)) {
+				newpolygons = new List<Polygon> ();
+			}
+			else {
+				var a = new Tree (Bounds, Polygons);
+				var b = new Tree (csg.Bounds, csg.Polygons);
 
-			a.Invert ();
-			b.ClipTo (a);
-			b.Invert ();
-			a.ClipTo (b);
-			b.ClipTo (a);
-			a.AddPolygons (b.AllPolygons ());
-			a.Invert ();
+				a.Invert ();
+				b.ClipTo (a);
+				b.Invert ();
+				a.ClipTo (b);
+				b.ClipTo (a);
+				a.AddPolygons (b.AllPolygons ());
+				a.Invert ();
 
-			var result = Solid.FromPolygons (a.AllPolygons ());
+				newpolygons = a.AllPolygons ();
+			}
+
+			var result = Solid.FromPolygons (newpolygons);
 			if (retesselate)
 				result = result.Retesselated ();
 			if (canonicalize)

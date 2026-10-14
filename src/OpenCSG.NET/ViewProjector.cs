@@ -9,7 +9,10 @@ using System.Collections.Generic;
 /// <list type="number">
 /// <item><b>特征边提取</b>——每个视图只保留三类边：轮廓边（相邻两面一正对相机、一背对）、
 /// 锐边（二面角 &gt; <see cref="ViewMeshTopology.SharpAngleDegrees"/>）、边界边（只被一个三角形引用）。
-/// 曲面镶嵌产生的近似共面缝被剔除，图面因此是工程轮廓而不是网格线团。</item>
+/// 曲面镶嵌产生的近似共面缝被剔除，图面因此是工程轮廓而不是网格线团。
+/// 边界边中属于**分解缝**（CSG 求值把大面按小特征切成多片后，T 接缝的单侧边）的子区间
+/// 按内部边剔除（DEFECT-010 修复，见 <see cref="ClassifyBoundarySpans"/>）——否则薄板叠加
+/// 小凸台这类构造会在视图里画出贯穿全长的幻线。</item>
 /// <item><b>Z-buffer 消隐</b>——把正对相机的三角形光栅化到规则深度栅格，
 /// 候选边沿长度采样，逐段与栅格深度比较切分为可见/隐藏。</item>
 /// </list>
@@ -32,11 +35,22 @@ public sealed class ViewProjector
 
     private const double MinDepthGap = 1e-9;
 
+    /// <summary>分解缝判定的共线容差（mm）：与 <c>ViewMeshTopology</c> 的顶点焊接容差（1e-6）同量级。</summary>
+    private const double CollinearTolerance = 1e-6;
+
     private readonly ViewMeshTopology _mesh;
+
+    /// <summary>
+    /// 逐边界边的**保留子区间**（t ∈ [0,1] 沿边，扁平存放 [t0,t1,t0,t1,…]）：
+    /// <c>null</c> = 整边保留（真实开放边界或未识别为分解缝）；空数组 = 整边剔除；
+    /// 其余为按分解缝覆盖切分后的保留段。仅边界边（<c>TriB &lt; 0</c>）非 null，其余下标恒为 null。
+    /// </summary>
+    private readonly double[]?[] _boundaryKeepSpans;
 
     public ViewProjector(IReadOnlyList<ViewTriangle> triangles)
     {
         _mesh = new ViewMeshTopology(triangles);
+        _boundaryKeepSpans = ClassifyBoundarySpans(_mesh);
     }
 
     /// <summary>网格规模（供进度/日志用）。</summary>
@@ -65,13 +79,27 @@ public sealed class ViewProjector
         for (var i = 0; i < triangles.Count; i++)
             frontFacing[i] = _mesh.Normals[i].Dot(look) < 0;
 
-        // ② 候选特征边筛选（轮廓 / 锐 / 边界）。
-        var candidates = new List<ViewMeshTopology.ViewEdge>(_mesh.Edges.Count / 4 + 16);
-        foreach (var edge in _mesh.Edges)
+        // ② 候选特征边筛选（轮廓 / 锐 / 边界；边界边按分解缝识别取保留子区间 —— DEFECT-010 修复）。
+        var candidates = new List<(ViewPoint A, ViewPoint B)>(_mesh.Edges.Count / 4 + 16);
+        for (var i = 0; i < _mesh.Edges.Count; i++)
         {
+            var edge = _mesh.Edges[i];
+            var a = _mesh.Points[edge.P0];
+            var b = _mesh.Points[edge.P1];
+
             if (edge.TriB < 0)
             {
-                candidates.Add(edge);
+                var keep = _boundaryKeepSpans[i];
+                if (keep == null)
+                {
+                    candidates.Add((a, b));
+                }
+                else
+                {
+                    for (var s = 0; s + 1 < keep.Length; s += 2)
+                        candidates.Add((Lerp(a, b, keep[s]), Lerp(a, b, keep[s + 1])));
+                }
+
                 continue;
             }
 
@@ -79,7 +107,7 @@ public sealed class ViewProjector
             var frontB = frontFacing[edge.TriB];
             if (frontA != frontB)
             {
-                candidates.Add(edge); // 轮廓边
+                candidates.Add((a, b)); // 轮廓边
                 continue;
             }
 
@@ -87,18 +115,15 @@ public sealed class ViewProjector
                 continue; // 两侧都背对相机 ⇒ 该边不可能被看见
 
             if (edge.IsSharp)
-                candidates.Add(edge);
+                candidates.Add((a, b));
         }
 
         // ③ 深度栅格 + 逐边切分。
         var buffer = DepthRaster.Build(_mesh, frontFacing, view);
         var segments = new List<ViewSegment>(candidates.Count * 2);
 
-        foreach (var edge in candidates)
+        foreach (var (a, b) in candidates)
         {
-            var a = _mesh.Points[edge.P0];
-            var b = _mesh.Points[edge.P1];
-
             var a2 = new ViewPoint2(a.Dot(view.Right), a.Dot(view.Up));
             var b2 = new ViewPoint2(b.Dot(view.Right), b.Dot(view.Up));
             // 深度 = p·Look：相机在 −Look 侧 ⇒ 该值随「远离观察者」递增，
@@ -119,6 +144,179 @@ public sealed class ViewProjector
         return new ViewProjection(view, cleaned, curves.Arcs);
     }
 
+    private static ViewPoint Lerp(ViewPoint a, ViewPoint b, double t)
+        => new ViewPoint(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t, a.Z + (b.Z - a.Z) * t);
+
+    /// <summary>
+    /// **分解缝识别**（DEFECT-010 修复）：CSG 求值把大面按小特征（凸台/孔/槽的 BSP 平面）切成多片后，
+    /// 求交线两侧的三角化不匹配（T 接缝）⇒ 该线在三角汤里成为**单侧（边界）边**，投影器按边界边
+    /// 放行就会画出贯穿大面的幻线。识别口径与「匹配网格」对齐：若其一段子区间被**共面三角形**的
+    /// 共线边覆盖（两侧面法向夹角 ≤ <see cref="ViewMeshTopology.SharpAngleDegrees"/> ⇒ 是同一片
+    /// 曲面的内部分割，匹配网格里该处本就不存在特征边），该子区间按内部边剔除；其余区间
+    /// （真实开放边界、锐特征线——其覆盖方与自身不共面）原样保留。
+    /// <para>
+    /// 只剔除**共面**覆盖是有意的：真实棱线（如板顶角线）的 T 接缝形态与幻线结构相同
+    /// （长边 + 多段覆盖），唯一区别就是覆盖方与自身共面与否 —— 探针实测区分见
+    /// <c>BoundaryProjectionTest</c>（板顶角线 |Δn|=90° 保留、分解缝 |Δn|=0° 剔除）。
+    /// 覆盖检索按方向量化分桶（同一直线上的边必落同桶），单次构建 O(边界边 × 桶规模)。
+    /// </para>
+    /// </summary>
+    static double[]?[] ClassifyBoundarySpans(ViewMeshTopology mesh)
+    {
+        var edges = mesh.Edges;
+        var result = new double[]?[edges.Count];
+
+        var boundaryCount = 0;
+        for (var i = 0; i < edges.Count; i++)
+            if (edges[i].TriB < 0)
+                boundaryCount++;
+        if (boundaryCount == 0)
+            return result;
+
+        // 方向桶：量化单位方向（符号规范化）⇒ 共线边必同桶；桶内再做精确共线/覆盖判定。
+        var buckets = new Dictionary<(long X, long Y, long Z), List<int>>(edges.Count);
+        for (var i = 0; i < edges.Count; i++)
+        {
+            if (DirectionBucket(mesh, edges[i], out var key))
+            {
+                if (!buckets.TryGetValue(key, out var list))
+                {
+                    list = new List<int>(4);
+                    buckets[key] = list;
+                }
+
+                list.Add(i);
+            }
+        }
+
+        var cosSharp = Math.Cos(ViewMeshTopology.SharpAngleDegrees * Math.PI / 180.0);
+
+        for (var i = 0; i < edges.Count; i++)
+        {
+            var edge = edges[i];
+            if (edge.TriB >= 0)
+                continue;
+
+            var pa = mesh.Points[edge.P0];
+            var pb = mesh.Points[edge.P1];
+            var d = new ViewVector(pb.X - pa.X, pb.Y - pa.Y, pb.Z - pa.Z);
+            var length = Math.Sqrt(d.X * d.X + d.Y * d.Y + d.Z * d.Z);
+            if (length <= CollinearTolerance)
+                continue; // 退化边
+
+            var u = new ViewVector(d.X / length, d.Y / length, d.Z / length);
+            if (!DirectionBucket(mesh, edge, out var bucketKey) || !buckets.TryGetValue(bucketKey, out var bucket))
+                continue;
+
+            List<(double Lo, double Hi)>? suppressed = null;
+            foreach (var f in bucket)
+            {
+                if (f == i)
+                    continue;
+
+                var other = edges[f];
+                var qa = mesh.Points[other.P0];
+                var qb = mesh.Points[other.P1];
+
+                // 共线：两端点到本边直线的垂直距离 ≤ 容差。
+                if (PerpendicularDistance(qa, pa, u) > CollinearTolerance
+                    || PerpendicularDistance(qb, pa, u) > CollinearTolerance)
+                    continue;
+
+                var ta = (double)((qa.X - pa.X) * u.X + (qa.Y - pa.Y) * u.Y + (qa.Z - pa.Z) * u.Z) / length;
+                var tb = (double)((qb.X - pa.X) * u.X + (qb.Y - pa.Y) * u.Y + (qb.Z - pa.Z) * u.Z) / length;
+                var lo = Math.Max(0.0, Math.Min(ta, tb));
+                var hi = Math.Min(1.0, Math.Max(ta, tb));
+                if ((hi - lo) * length <= CollinearTolerance)
+                    continue; // 仅端点相接，无实质覆盖
+
+                // 共面判定：覆盖边所在三角形与本边三角形法向夹角 ≤ 锐边阈值 ⇒ 同一曲面的内部分割。
+                var smooth = mesh.Normals[edge.TriA].Dot(mesh.Normals[other.TriA]) >= cosSharp;
+                if (!smooth && other.TriB >= 0)
+                    smooth = mesh.Normals[edge.TriA].Dot(mesh.Normals[other.TriB]) >= cosSharp;
+                if (!smooth)
+                    continue; // 覆盖方与自身不共面 ⇒ 真实棱线（保留），如板顶角线
+
+                (suppressed ??= new List<(double, double)>(2)).Add((lo, hi));
+            }
+
+            if (suppressed == null)
+                continue; // 无共面覆盖 ⇒ 真实开放边界，整边保留
+
+            result[i] = Complement(suppressed);
+        }
+
+        return result;
+    }
+
+    /// <summary>互补区间（[0,1] 减去合并后的抑制区间）；无保留段时返回空数组（整边剔除）。</summary>
+    static double[] Complement(List<(double Lo, double Hi)> suppressed)
+    {
+        suppressed.Sort((x, y) => x.Lo.CompareTo(y.Lo));
+        var keep = new List<double>(suppressed.Count * 2 + 2);
+        var cursor = 0.0;
+
+        foreach (var (lo, hi) in suppressed)
+        {
+            if (lo > cursor)
+                keep.Add(cursor);
+            if (lo > cursor)
+                keep.Add(lo);
+            if (hi > cursor)
+                cursor = hi;
+        }
+
+        if (cursor < 1.0)
+        {
+            keep.Add(cursor);
+            keep.Add(1.0);
+        }
+
+        return keep.ToArray();
+    }
+
+    /// <summary>端点方向量化分桶（符号规范化：首个非零分量取正）。</summary>
+    static bool DirectionBucket(ViewMeshTopology mesh, ViewMeshTopology.ViewEdge edge, out (long X, long Y, long Z) key)
+    {
+        key = default;
+        var a = mesh.Points[edge.P0];
+        var b = mesh.Points[edge.P1];
+        var dx = b.X - a.X;
+        var dy = b.Y - a.Y;
+        var dz = b.Z - a.Z;
+        var length = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+        if (length <= CollinearTolerance)
+            return false;
+
+        dx /= length;
+        dy /= length;
+        dz /= length;
+
+        if (dx > CollinearTolerance || (Math.Abs(dx) <= CollinearTolerance && dy > CollinearTolerance)
+            || (Math.Abs(dx) <= CollinearTolerance && Math.Abs(dy) <= CollinearTolerance && dz < 0))
+        {
+            dx = -dx;
+            dy = -dy;
+            dz = -dz;
+        }
+
+        const double inv = 1e6;
+        key = ((long)Math.Round(dx * inv), (long)Math.Round(dy * inv), (long)Math.Round(dz * inv));
+        return true;
+    }
+
+    static double PerpendicularDistance(ViewPoint p, ViewPoint origin, ViewVector u)
+    {
+        var vx = p.X - origin.X;
+        var vy = p.Y - origin.Y;
+        var vz = p.Z - origin.Z;
+        var t = vx * u.X + vy * u.Y + vz * u.Z;
+        var rx = vx - t * u.X;
+        var ry = vy - t * u.Y;
+        var rz = vz - t * u.Z;
+        return Math.Sqrt(rx * rx + ry * ry + rz * rz);
+    }
+
     private static IEnumerable<ViewPoint2> EnumeratePoints(IReadOnlyList<ViewSegment> segments)
     {
         foreach (var segment in segments)
@@ -137,6 +335,18 @@ public sealed class ViewProjector
         private readonly double _bias;
         private readonly double _cell;
         private readonly double[] _depth;
+
+        /// <summary>
+        /// 逐格**格内深度误差上界**（DEFECT-005 修复）：最小深度写入者（该格 nearest 的来源三角形）
+        /// 在一块格子内的深度变化量 = <c>cell × (|∂d/∂x| + |∂d/∂y|)</c>（正交投影下 d 在屏幕空间仿射，
+        /// 梯度由重心坐标系数闭式给出）。旧口径只比 <c>depth ≤ 格心深度 + bias</c>：斜掠面在同一格内
+        /// 格心采样深度可比边点插值深度近 <c>cell·tanφ</c>，当该量超过 bias（= 深度跨度×1e-3）时
+        /// 几何可见的边被误判 H（实测 59/64 语料种子、长至 91.7 格的虚线）。把误差上界随 nearest 一起
+        /// 记账后，比较对象变成「nearest 写入面在该格内的深度区间」上界，格内量化误差不再进判定。
+        /// （备选「写入面平面外推」模型实测更差：写入三角形不覆盖采样点所在格区时外推无意义，
+        /// 30/64 种子出现 111 样本/视图的伪 H —— 见 fix 轮报告。）
+        /// </summary>
+        private readonly double[] _slack;
         private readonly bool _empty;
         private readonly int _height;
         private readonly double _minH;
@@ -147,12 +357,14 @@ public sealed class ViewProjector
         {
             _empty = empty;
             _depth = Array.Empty<double>();
+            _slack = Array.Empty<double>();
         }
 
         private DepthRaster(
-            double[] depth, int width, int height, double minH, double minV, double cell, double bias)
+            double[] depth, double[] slack, int width, int height, double minH, double minV, double cell, double bias)
         {
             _depth = depth;
+            _slack = slack;
             _width = width;
             _height = height;
             _minH = minH;
@@ -207,7 +419,8 @@ public sealed class ViewProjector
                 depth[i] = double.PositiveInfinity;
 
             var range = Math.Max(maxD - minD, 1e-9);
-            var raster = new DepthRaster(depth, width, height, minH, minV, cell, range * DepthBiasFactor + MinDepthGap);
+            var raster = new DepthRaster(
+                depth, new double[width * height], width, height, minH, minV, cell, range * DepthBiasFactor + MinDepthGap);
 
             for (var i = 0; i < mesh.Triangles.Count; i++)
             {
@@ -273,7 +486,7 @@ public sealed class ViewProjector
                 return true;
 
             var depth = depthA + (depthB - depthA) * t;
-            return depth <= nearest + _bias;
+            return depth <= nearest + _bias + _slack[py * _width + px];
         }
 
         private static void Emit(
@@ -318,6 +531,12 @@ public sealed class ViewProjector
                 return; // 屏幕空间退化三角形
 
             var invDenom = 1.0 / denom;
+
+            // 屏幕空间深度梯度（格坐标为单位的偏导；∂d/∂sx = invDenom·[(by−cy)(a.D−c.D) + (cy−ay)(b.D−c.D)]）,
+            // 格内深度变化上界 = 一格步长 × 分量绝对值之和（DEFECT-005 修复）。
+            var slopePerCell = Math.Abs((by - cy) * (a.D - c.D) + (cy - ay) * (b.D - c.D)) * invDenom
+                             + Math.Abs((cx - bx) * (a.D - c.D) + (ax - cx) * (b.D - c.D)) * invDenom;
+
             for (var py = y0; py <= y1; py++)
             {
                 var sy = py + 0.5;
@@ -333,7 +552,10 @@ public sealed class ViewProjector
                     var d = l0 * a.D + l1 * b.D + l2 * c.D;
                     var index = py * _width + px;
                     if (d < _depth[index])
+                    {
                         _depth[index] = d;
+                        _slack[index] = slopePerCell;
+                    }
                 }
             }
         }

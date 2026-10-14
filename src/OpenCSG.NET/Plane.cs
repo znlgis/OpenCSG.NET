@@ -200,28 +200,71 @@ namespace Csg
         }
         public Plane Transform(Matrix4x4 matrix4x4)
         {
-            var ismirror = matrix4x4.IsMirroring;
-            // get two vectors in the plane:
-            var r = this.Normal.RandomNonParallelVector();
-            var u = this.Normal.Cross(r);
-            var v = this.Normal.Cross(u);
-            // get 3 points in the plane:
-            var point1 = this.Normal * (this.W);
-            var point2 = point1 + (u);
-            var point3 = point1 + (v);
-            // transform the points:
-            point1 = point1 * (matrix4x4);
-            point2 = point2 * (matrix4x4);
-            point3 = point3 * (matrix4x4);
-            // and create a new plane from the transformed points:
-            var newplane = Plane.FromVector3Ds(point1, point2, point3);
-            if (ismirror)
+            // **精确仿射映射**（DEFECT-003 修复）：平面 (n, W) 在 v' = A·v + t 下的像是
+            // (A⁻ᵀ·n, W + (A⁻ᵀ·n)·t)（归一化后）——A⁻ᵀ·n 用余子式矩阵（= 伴随矩阵转置）除行列式算。
+            // 旧实现在「平面上取三点 → 逐点变换 → 用变换后三点重建平面」：平移量 ~1e6 时
+            // (p + t) 相减发生灾难性抵消，切向量的相对误差被放大（~1e-10），法向误差再经
+            // |变换后点| ≈ 1e6 放大成 W 漂移——实测 1e6 平移往返后 W 漂移达 5e-5 > Plane.EPSILON
+            // (1e-5)，SplitPolygon 的共面判定失效（Survey 档 A∪A 产出 11/12 个面的重复/丢失）。
+            // 精确公式对旋转/镜像/缩放/平移都是一次乘加，误差 ~ulp；镜像不再需要额外 Flipped
+            // （负行列式经 A⁻ᵀ 自然给出正确的朝向）。
+            var e = matrix4x4.Elements;
+            var a00 = e[0]; var a01 = e[4]; var a02 = e[8];
+            var a10 = e[1]; var a11 = e[5]; var a12 = e[9];
+            var a20 = e[2]; var a21 = e[6]; var a22 = e[10];
+
+            var c00 = a11 * a22 - a12 * a21;
+            var c01 = a12 * a20 - a10 * a22;
+            var c02 = a10 * a21 - a11 * a20;
+            var det = a00 * c00 + a01 * c01 + a02 * c02;
+
+            if (det != 0)
             {
-                // the transform is mirroring
-                // We should mirror the plane:
-                newplane = newplane.Flipped();
+                var c10 = a02 * a21 - a01 * a22;
+                var c11 = a00 * a22 - a02 * a20;
+                var c12 = a01 * a20 - a00 * a21;
+                var c20 = a01 * a12 - a02 * a11;
+                var c21 = a02 * a10 - a00 * a12;
+                var c22 = a00 * a11 - a01 * a10;
+
+                var n = Normal;
+                var mx = (c00 * n.X + c01 * n.Y + c02 * n.Z) / det;
+                var my = (c10 * n.X + c11 * n.Y + c12 * n.Z) / det;
+                var mz = (c20 * n.X + c21 * n.Y + c22 * n.Z) / det;
+
+                var length = Math.Sqrt(mx * mx + my * my + mz * mz);
+                if (length > 0)
+                {
+                    var w = (W + mx * e[12] + my * e[13] + mz * e[14]) / length;
+                    return new Plane(new Vector3D(mx / length, my / length, mz / length), w);
+                }
             }
-            return newplane;
+
+            // 退化矩阵（行列式为 0 / 法向塌缩）：回退三点重建路径（保持旧行为）。
+            {
+                var ismirror = matrix4x4.IsMirroring;
+                // get two vectors in the plane:
+                var r = this.Normal.RandomNonParallelVector();
+                var u = this.Normal.Cross(r);
+                var v = this.Normal.Cross(u);
+                // get 3 points in the plane:
+                var point1 = this.Normal * (this.W);
+                var point2 = point1 + (u);
+                var point3 = point1 + (v);
+                // transform the points:
+                point1 = point1 * (matrix4x4);
+                point2 = point2 * (matrix4x4);
+                point3 = point3 * (matrix4x4);
+                // and create a new plane from the transformed points:
+                var newplane = Plane.FromVector3Ds(point1, point2, point3);
+                if (ismirror)
+                {
+                    // the transform is mirroring
+                    // We should mirror the plane:
+                    newplane = newplane.Flipped();
+                }
+                return newplane;
+            }
         }
     }
 

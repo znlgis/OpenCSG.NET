@@ -91,11 +91,13 @@ namespace Csg.Test
             var mesh5k = PerfWorkloads.ProjectMesh(PerfWorkloads.ProjectSmallTriangles);
             var mesh20k = PerfWorkloads.ProjectMesh(PerfWorkloads.ProjectLargeTriangles);
 
-            // 非空转守卫：三视图输出段数/弧数实测（5k: 123/0/123 段、0/1/0 弧；20k: 226/0/226、0/1/0）。
+            // 非空转守卫：三视图输出段数/弧数实测（5k: 4/0/4 段、0/1/0 弧；20k: 4/0/4 段、0/1/0 弧）。
+            // DEFECT-004 修复前 5k 为 123/0/123 段（20k 226/0/226）——侧视图的圆柱端盖缘碎片；
+            // 成链取向/退化阈修复后碎片收整为 4 条矩形边（2 条母线 + 2 条端面缘线），轴向视图仍 1 条弧。
             var views5k = new ViewProjector(mesh5k).Project();
             Assert.That(views5k.Count, Is.EqualTo(3), "三视图数量");
             Assert.That(views5k[0].Segments.Count + views5k[1].Segments.Count + views5k[2].Segments.Count,
-                Is.EqualTo(246), "5k 网格三视图总段数实测 246（钉值）");
+                Is.EqualTo(8), "5k 网格三视图总段数实测 8（钉值；修复前 246）");
             Assert.That(views5k[1].Arcs.Count, Is.EqualTo(1), "5k 网格俯视 1 条弧（轴向视图，钉值）");
 
             var measured5k = BudgetClock.MinMs(3, 1, () => new ViewProjector(mesh5k).Project());

@@ -7,11 +7,20 @@ using NUnit.Framework;
 
 namespace Csg.Test
 {
+    /// <summary>
+    /// DEFECT-001 修复回归（2026-10-14；登记于 tests/DEFECTS.md 已修复表）。
+    /// <para>
+    /// 原缺陷：<c>ViewArcFitter.DiagnosticsEnabled</c>/<c>LastDiagnostics</c> 是进程级静态，
+    /// 并行测试互相串扰（4 worker 实跑：契约用例读到另一 worker 的矩形视图链统计）。
+    /// 修复：两态改为 <c>[ThreadStatic]</c> 线程局部；本组用例断言线程隔离（修复前为
+    /// 钉住错误行为的 <c>[Explicit]</c> 复现）。一行复现：
+    /// <c>dotnet test tests/OpenCSG.NET.Tests -c Release --filter "FullyQualifiedName~ViewArcFitterDiagnosticsTest"</c>。
+    /// </para>
+    /// </summary>
     [TestFixture]
     public class ViewArcFitterDiagnosticsTest
     {
         [Test]
-        [Explicit("DEFECT-001: ViewArcFitter.DiagnosticsEnabled/LastDiagnostics 非线程隔离，并行测试下串扰")]
         public void DiagnosticsEnabled_IsNotVisibleOnOtherThreads()
         {
             var segments = new[]
@@ -30,10 +39,9 @@ namespace Csg.Test
 
             try
             {
-                // 期望：诊断开关是线程局部状态，另一个线程不应看到它。
-                // 实际（DEFECT-001）：普通 static ⇒ 另一线程读到 true，本断言失败。
+                // DEFECT-001 修复回归：诊断开关为线程局部状态，另一线程不应看到它。
                 Assert.That(seenOnOtherThread, Is.False,
-                    "DEFECT-001：另一线程读到了 DiagnosticsEnabled=true，说明它是进程级全局态");
+                    "另一线程不应读到本线程的 DiagnosticsEnabled=true（DEFECT-001 修复后为线程局部态）");
             }
             finally
             {
@@ -42,17 +50,16 @@ namespace Csg.Test
         }
 
         [Test]
-        [Explicit("DEFECT-001: ViewArcFitter.DiagnosticsEnabled/LastDiagnostics 非线程隔离，并行测试下串扰")]
-        public void LastDiagnostics_IsOverwrittenByAConcurrentFitFromAnotherThread()
+        public void LastDiagnostics_IsNotOverwrittenByAConcurrentFitFromAnotherThread()
         {
-            // 并行整套件（4 worker，tests/ParallelRun.runsettings）实跑暴露的串扰方向（2026-10-14）：
+            // DEFECT-001 的并行串扰方向（2026-10-14 实跑暴露，修复后转为回归）：契约用例
             // ViewArcFitterContractTest.Diagnostics_Enabled_RecordsChainSummary 在多 worker 下失败，
             // 它读到的 LastDiagnostics 是另一 worker 的矩形视图（「输入 4 段…首(-15.00,-5.00)
             // 末(15.00,5.00)」），而其自身输入是 8 段 90° 弧。
-            // 本用例用两个屏障把该时序钉成确定性复现：
+            // 本用例用两个屏障把该时序钉成确定性回归：
             //   主线程（= 那个开诊断的用例）：开 DiagnosticsEnabled=true → Fit(8 段弧) → 读 LastDiagnostics；
-            //   另一线程（= 任意并行投影用例）：什么都不开，仅因进程级静态读到 true → Fit(4 段矩形)
-            //   ⇒ 覆写主线程的 LastDiagnostics。
+            //   另一线程（= 任意并行投影用例）：什么都不开 → Fit(4 段矩形)
+            //   ⇒ 修复后（线程局部态）：另一线程读不到 true、也覆写不了主线程的 LastDiagnostics。
             // 失败路径硬化（审查 M1）：另一线程的异常存进 otherThreadError（不逃逸终止进程）；
             // finally 仅在确实 Start 过时 Join（前置断言失败时 Join 未启动线程会抛 ThreadStateException 掩盖真因）。
             var ownSegments = ArcSegments(radius: 10, startDeg: 0, sweepDeg: 90, steps: 8);
@@ -71,7 +78,7 @@ namespace Csg.Test
                 {
                     barrier.SignalAndWait(timeout);                 // 等主线程先写完自己的 LastDiagnostics
                     otherThreadSawEnabled = ViewArcFitter.DiagnosticsEnabled;
-                    ViewArcFitter.Fit(otherSegments);               // 串扰写入：覆写 LastDiagnostics
+                    ViewArcFitter.Fit(otherSegments);               // 另一线程并行 Fit（不得产生串扰）
                     otherThreadDone = true;
                     barrier.SignalAndWait(timeout);                 // 让主线程在其后读取
                 }
@@ -102,15 +109,13 @@ namespace Csg.Test
 
                 Assert.Multiple(() =>
                 {
-                    // 预期：另一线程读不到主线程打开的诊断开关。
-                    // 实际（DEFECT-001）：进程级 static ⇒ 读到 true，其 Fit 还会写全局 LastDiagnostics。
+                    // DEFECT-001 修复回归：另一线程读不到主线程打开的诊断开关。
                     Assert.That(otherThreadSawEnabled, Is.False,
-                        "DEFECT-001(1)：另一线程读到了 DiagnosticsEnabled=true，说明它是进程级全局态");
+                        "另一线程不应读到 DiagnosticsEnabled=true（线程局部态）");
 
-                    // 预期：主线程读完自己的诊断结果前，LastDiagnostics 不被别的线程改写。
-                    // 实际（DEFECT-001）：被另一线程的 Fit 覆写成别的输入的链统计（并行整套件实跑同签名）。
+                    // DEFECT-001 修复回归：主线程的诊断结果不被另一线程的 Fit 覆写。
                     Assert.That(afterCrosstalk, Is.EqualTo(ownDiagnostics),
-                        "DEFECT-001(2)：主线程的 LastDiagnostics 被另一线程的 Fit 覆写");
+                        "主线程的 LastDiagnostics 不应被另一线程的 Fit 覆写（线程局部态）");
                 });
             }
             finally

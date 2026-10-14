@@ -20,7 +20,20 @@ namespace Csg.Test
         /// <summary>点落在线段上的绝对容差下限（mm）。</summary>
         public const double OnSegmentTolerance = 1e-6;
 
-        public static void AssertBoundsCoverSegments(ViewProjection view, string? message = null)
+        /// <summary>弧上的采样份数（<see cref="AssertBoundsCoverGeometry"/> 用；与实现无关的独立见证）。</summary>
+        public const int ArcSampleCount = 64;
+
+        /// <summary>
+        /// 包络必须覆盖视图**全部出图几何**：线段端点 + 弧上的采样点（DEFECT-009 契约：
+        /// 被弧吸收的折线已从 <see cref="ViewProjection.Segments"/> 移除，只看线段会漏）。
+        /// <para>
+        /// 弧的见证方式与实现**相互独立**：均匀采样 64 个扫掠角 + 两端点（不是复算实现的
+        /// 「端点 + 象限极值点」——那样的对拍恒真、抓不到实现选错极值点）；整圆按全圆外接盒
+        /// 四极值校验（闭弧出图即整圆，外接盒是精确极值）。非有限/零扫掠在实现里按整圆保守并入，
+        /// 这里同口径处置（该输入的拒绝由序列化守卫负责）。
+        /// </para>
+        /// </summary>
+        public static void AssertBoundsCoverGeometry(ViewProjection view, string? message = null)
         {
             var prefix = Prefix(message);
             var bounds = view.Bounds;
@@ -29,6 +42,41 @@ namespace Csg.Test
                 AssertEndpointInBounds(segment.Start, bounds, prefix, view.Direction.Name);
             foreach (var segment in view.Segments)
                 AssertEndpointInBounds(segment.End, bounds, prefix, view.Direction.Name);
+
+            foreach (var arc in view.Arcs)
+                AssertArcInBounds(arc, bounds, prefix, view.Direction.Name);
+        }
+
+        static void AssertArcInBounds(ViewArc arc, ViewBounds2 bounds, string prefix, string viewName)
+        {
+            if (arc.IsClosed || !IsUsableSweep(arc, out var sweep))
+            {
+                // 整圆（或按整圆保守处置的退化扫掠）：外接盒四极值是精确极值。
+                AssertEndpointInBounds(new ViewPoint2(arc.Center.X - arc.Radius, arc.Center.Y), bounds, prefix, viewName);
+                AssertEndpointInBounds(new ViewPoint2(arc.Center.X + arc.Radius, arc.Center.Y), bounds, prefix, viewName);
+                AssertEndpointInBounds(new ViewPoint2(arc.Center.X, arc.Center.Y - arc.Radius), bounds, prefix, viewName);
+                AssertEndpointInBounds(new ViewPoint2(arc.Center.X, arc.Center.Y + arc.Radius), bounds, prefix, viewName);
+                return;
+            }
+
+            for (var k = 0; k <= ArcSampleCount; k++)
+            {
+                var angle = arc.StartAngle + sweep * k / ArcSampleCount;
+                AssertEndpointInBounds(
+                    new ViewPoint2(arc.Center.X + arc.Radius * Math.Cos(angle), arc.Center.Y + arc.Radius * Math.Sin(angle)),
+                    bounds, prefix, viewName);
+            }
+        }
+
+        static bool IsUsableSweep(ViewArc arc, out double sweep)
+        {
+            sweep = arc.EndAngle - arc.StartAngle;
+            if (double.IsNaN(sweep) || double.IsInfinity(sweep))
+                return false;
+
+            sweep %= 2 * Math.PI;
+            if (sweep < 0) sweep += 2 * Math.PI;
+            return sweep > 0;
         }
 
         /// <summary>

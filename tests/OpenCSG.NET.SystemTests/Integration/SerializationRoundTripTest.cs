@@ -89,13 +89,16 @@ namespace Csg.Test
             Assert.That(CsgMesh.TrianglesOf(viaJson).Count, Is.EqualTo(CsgMesh.TrianglesOf(direct).Count),
                 $"seed={seed} 网格三角形数");
             Assert.That(GeometryAssert.SignedVolume(direct), Is.GreaterThan(0),
-                $"seed={seed} 实测夹具必须法线朝外（该种子不在 DEFECT-002 的 13 个错误种子表内）");
+                $"seed={seed} 实测夹具必须法线朝外（DEFECT-002 修复后，空操作数类种子读数为合法空而非负体积）");
         }
 
         /// <summary>
         /// 序列化往返后的实体投影不得有任何段/弧差异（实测端点差 0，含布尔与变换节点）。
-        /// 本条固定树实测：46 多边形、96 三角形、体积 2891.7128129211033、三视图段数 20,38,15 两侧一致；
-        /// 直接侧读数另以绝对钉固定（防两侧同空使比较空转）。
+        /// 本条固定树实测：46 多边形、96 三角形、体积 2891.7128129211033、三视图段数 20,19,15
+        /// （弧数 0,5,0）两侧一致；直接侧读数另以绝对钉固定（防两侧同空使比较空转）。
+        /// 演进：DEFECT-010 修复前 20,38,15 / 弧 0,1,0 → 010 修复后 20,31,15 / 弧 0,2,0 →
+        /// DEFECT-004/005 修复后 20,19,15 / 弧 0,5,0 → **DEFECT-012 修复后 20,23,15 / 弧 0,4,0**
+        /// （角步离群守卫拒绝了跨长弦的四段窗拟合，相应折线段不再被吸收）。
         /// </summary>
         [Test]
         public void RoundTrippedTree_ProjectsIdentically()
@@ -109,13 +112,13 @@ namespace Csg.Test
             var direct = CsgEvaluator.Evaluate(tree);
             var viaJson = CsgEvaluator.Evaluate(CsgSerialization.FromJson(CsgSerialization.ToJson(tree)));
 
-            // 绝对读数钉（实测钉，防 0==0 空转）：46 多边形、96 三角形、三视图段数 20,38,15。
+            // 绝对读数钉（实测钉，防 0==0 空转）：46 多边形、96 三角形、三视图段数 20,23,15（弧 0,5,0）。
             Assert.That(direct.Polygons.Count, Is.EqualTo(46), "实测直接求值 46 个多边形");
             Assert.That(CsgMesh.TrianglesOf(direct).Count, Is.EqualTo(96), "实测直接求值 96 个三角形");
             var directViews = ViewBridge.ProjectViews(direct, ViewDirections.OrthographicThree);
             var roundViews = ViewBridge.ProjectViews(viaJson, ViewDirections.OrthographicThree);
-            Assert.That(directViews.Select(v => v.Segments.Count).ToArray(), Is.EqualTo(new[] { 20, 38, 15 }),
-                "实测三视图段数 20,38,15（防比较空转）");
+            Assert.That(directViews.Select(v => v.Segments.Count).ToArray(), Is.EqualTo(new[] { 20, 23, 15 }),
+                "实测三视图段数 20,23,15（防比较空转；DEFECT-012 修复后口径）");
 
             PipelineIntegrationTest.AssertSameViews(
                 directViews, roundViews,

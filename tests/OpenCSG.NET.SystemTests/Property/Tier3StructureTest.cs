@@ -26,7 +26,7 @@ namespace Csg.Test
             var segments = ViewSegGen.Random(seed);
             var view = new ViewProjection(ViewDirections.Front, segments);
 
-            HlrAssert.AssertBoundsCoverSegments(view, $"seed={seed}");
+            HlrAssert.AssertBoundsCoverGeometry(view, $"seed={seed}");
         }
 
         [Test]

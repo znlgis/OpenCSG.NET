@@ -25,11 +25,9 @@ namespace Csg.Test
     /// <item>PrismXY 凸五边形棱柱（(0,0),(30,4),(22,18),(6,20),(-6,9)、拉伸 6）：左视 89.60999731652899 = 1；
     /// 主视 1.1145316377171215、俯视 1.036823085420279（横向视图）；</item>
     /// <item>Solids.Cylinder 轴向视图（俯视）：<b>不成立且非几何原因</b> —— 实测 Segments=0、Arcs=1
-    /// （R=8、330° 开口弧）⇒ 可见段总长 0 ≠ 凸包周长 49.69325665968398。
-    /// 即 DEFECT-004 机制①（成链 Grow 在朝向反向边处截断、330°&lt;360° 无法补整圆）的行为域，
-    /// 由 <see cref="CylinderAxialView_RimAbsorbedIntoArcs_OracleNotApplicable"/> 钉住当前读数；
-    /// DEFECT-009 已记录同一弧导致 Bounds 退化。横向视图 ratio=1.532759951958693（母线轮廓 +
-    /// 可见缘弦段，几何原因不成立）。</item>
+    /// （R=8、**整圆 360°、closed=true**；DEFECT-004 机制①修复后，修复前为 330° 开口弧）⇒ 可见段总长
+    /// 0 ≠ 凸包周长 49.69325665968398。DEFECT-009 曾记录同一弧导致 Bounds 退化（修复后由整圆盒覆盖）。
+    /// 横向视图 ratio=1.532759951958693（母线轮廓 + 可见缘弦段，几何原因不成立）。</item>
     /// <item>Solids.Sphere：视线切向视图（球轮廓为掠射）ratio≈2.51/2.52/2.13（碎段化，DEFECT-004 机制②域），
     /// 按 brief 口径整类排除，不设断言（数值见报告）。</item>
     /// </list>
@@ -117,11 +115,11 @@ namespace Csg.Test
 
         /// <summary>
         /// 圆柱轴向视图（<c>Solids.Cylinder(8, 24, center: true)</c> 的俯视）：
-        /// 实测 Segments=0、Arcs=1（R=8、330° 开口弧）⇒ 可见段总长 0 ≠ 凸包周长 49.69325665968398。
-        /// 即 <b>DEFECT-004</b> 机制①的行为域（成链在朝向反向边处截断 ⇒ 缺 30° 无法补整圆；
-        /// 与 <c>D9BoundsIgnoreArcsTest</c> 钉住的同一读数一致），故 oracle 在此不适用；
-        /// 本用例只钉当前读数 + 记录不适用性。修复 DEFECT-004 后本断言应重基线化
-        /// （原文：330° 开口弧 ⇒ 本表改引修复后的整圆口径）。
+        /// 实测 Segments=0、Arcs=1（**R=8、整圆 360°、closed=true**）⇒ 可见段总长 0 ≠
+        /// 凸包周长 49.69325665968398，故 oracle 在此不适用（几何全在弧表里）。
+        /// <b>DEFECT-004 机制①已修复</b>（成链取向携带）后重钉：修复前为 330° 开口弧
+        /// （成链在朝向反向边处截断 ⇒ 缺 30° 无法补整圆，与 <c>D9BoundsIgnoreArcsTest</c>
+        /// 当时钉住的同一读数一致）。
         /// </summary>
         [Test]
         public void CylinderAxialView_RimAbsorbedIntoArcs_OracleNotApplicable()
@@ -135,15 +133,16 @@ namespace Csg.Test
             Assert.That(view.Arcs.Count, Is.EqualTo(1), "DEFECT-004 当前读数：Arcs=1");
             var arc = view.Arcs[0];
             Assert.That(arc.Radius, Is.EqualTo(8.0).Within(1e-9), "DEFECT-004 当前读数：R=8");
-            Assert.That(arc.SweepDegrees, Is.EqualTo(330.0).Within(1e-6),
-                "DEFECT-004 当前读数：330° 开口弧（缺 30° > MaxClosingGapDegrees=25° ⇒ 未补整圆）");
+            Assert.That(arc.SweepDegrees, Is.EqualTo(360.0).Within(1e-6),
+                "DEFECT-004 修复后读数：整圆 360°（修复前 330° 开口弧）");
+            Assert.That(arc.IsClosed, Is.True, "DEFECT-004 修复后：整圆");
             Assert.That(Math.Abs(arc.Center.X), Is.LessThan(1e-12));
             Assert.That(Math.Abs(arc.Center.Y), Is.LessThan(1e-12));
 
             // oracle 的不适用性：可见段总长 = 0，凸包周长 = 内接 12 边形周长（实测 49.69325665968398）。
             var hull = ConvexHull.PerimeterOf(ProjectedVertices(solid, view.Direction));
             var visible = SumVisibleSegmentLength(view);
-            Assert.That(visible, Is.EqualTo(0.0), "DEFECT-004 域：可见段总长为 0（几何全在弧表里）");
+            Assert.That(visible, Is.EqualTo(0.0), "可见段总长为 0（几何全在弧表里，oracle 不适用）");
             Assert.That(hull, Is.GreaterThan(0.0), "凸包周长（真实几何投影）应为正");
             Assert.That(hull, Is.EqualTo(49.69325665968398).Within(1e-9), "实测内接 12 边形周长钉");
         }

@@ -166,10 +166,16 @@ public static class CsgHelpers
         var slantCut = HalfPlaneCut.Build(xCenter, yBottom, zOut, yT, -run, halfSlant, over, +1);
         var head = CylinderAlongX(new Vector3D(xCenter, yCenter, zi + headRadius), headRadius, thickness);
 
-        // 肩部 = 孔心标高以上、Z ∈ [立边, 切点] 的矩形 ∩ 圆盘以外（被减项自含圆盘 ⇒ 弧内区域补回）。
+        // 肩部 = 孔心标高以上、Z ∈ [立边, 立边 + 跨度] 的矩形 ∩ 圆盘以外（被减项自含圆盘 ⇒ 弧内区域补回）。
+        // 跨度必须覆盖台面标高（y = yT）处圆盘外的左段、即到 z = 立边 + R − R·sinθ：
+        //   · θ ≥ 30°（2·zT ≥ R）：切点跨度 zT = R·sinθ 已 ≥ R − R·sinθ，维持 zT（既有 θ≥30° 基线逐字节不变）；
+        //   · θ < 30°（2·zT < R）：只盖到切点会在 [切点, 孔心] 间残留水平台面 + 竖壁（DEFECT-008），
+        //     扩到孔心（跨度 R）——该域无既有 golden，与评审复算的 corrected 构造一致。
+        //   两域在 θ = 30° 交界处 R·sinθ = R − R·sinθ（覆盖恰好连续，输出无跳变）。
+        double shoulderSpan = (zT * 2 < headRadius) ? headRadius : zT;
         double upTop = yBottom + yT + 10;
-        var boxUpper = CsgNodes.Box(xCenter, (yCenter + upTop) / 2, zi + zT / 2,
-            over, upTop - yCenter, zT);
+        var boxUpper = CsgNodes.Box(xCenter, (yCenter + upTop) / 2, zi + shoulderSpan / 2,
+            over, upTop - yCenter, shoulderSpan);
         var shoulder = CsgNodes.Subtract(boxUpper, head);
 
         var hole = CylinderAlongX(new Vector3D(xCenter, yCenter, zi + headRadius), holeRadius, over);

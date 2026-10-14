@@ -80,8 +80,9 @@ namespace Csg.Test
             var nodeViews = ViewBridge.ProjectViews(byNode, ViewDirections.OrthographicThree);
             var primViews = ViewBridge.ProjectViews(byPrimitive, ViewDirections.OrthographicThree);
 
-            // 投影绝对读数钉（防两侧投影同为空使视图比较空转）：实测段数 4,4,4 / 35,0,34、弧数 0,0,0 / 0,1,0。
-            var expectedSegments = kind == "Box" ? new[] { 4, 4, 4 } : new[] { 35, 0, 34 };
+            // 投影绝对读数钉（防两侧投影同为空使视图比较空转）：实测段数 4,4,4 / 9,0,9、弧数 0,0,0 / 0,1,0
+            // （DEFECT-004/005 修复后圆柱侧视图碎片收整：35/34 → 9/9）。
+            var expectedSegments = kind == "Box" ? new[] { 4, 4, 4 } : new[] { 9, 0, 9 };
             var expectedArcs = kind == "Box" ? new[] { 0, 0, 0 } : new[] { 0, 1, 0 };
             Assert.That(nodeViews.Select(v => v.Segments.Count).ToArray(), Is.EqualTo(expectedSegments),
                 $"{kind}：节点路径三视图段数（实测钉）");
@@ -179,10 +180,11 @@ namespace Csg.Test
             var first = ViewBridge.ProjectViews(CsgEvaluator.Evaluate(tree), ViewDirections.OrthographicThree);
             var second = ViewBridge.ProjectViews(CsgEvaluator.Evaluate(tree), ViewDirections.OrthographicThree);
 
-            // 绝对读数钉（防两侧同空使比较空转）：实测三视图段数 18,8,33、弧数 0,1,0
-            // （同一树在探针实测 20 多边形 / 56 三角形 / 体积 1215.9999999999998，与 BooleanTransformTree 用例共用）。
-            Assert.That(first.Select(v => v.Segments.Count).ToArray(), Is.EqualTo(new[] { 18, 8, 33 }),
-                "两次求值的绝对段数钉（实测 18,8,33）");
+            // 绝对读数钉（防两侧同空使比较空转）：实测三视图段数 13,4,15、弧数 0,1,0
+            // （DEFECT-004/005 修复后碎片收整：18,4,33 → 13,4,15；同一树在探针实测 20 多边形 /
+            // 56 三角形 / 体积 1215.9999999999998，与 BooleanTransformTree 用例共用）。
+            Assert.That(first.Select(v => v.Segments.Count).ToArray(), Is.EqualTo(new[] { 13, 4, 15 }),
+                "两次求值的绝对段数钉（实测 13,4,15）");
             Assert.That(first.Select(v => v.ArcCount).ToArray(), Is.EqualTo(new[] { 0, 1, 0 }),
                 "两次求值的绝对弧数钉（实测 0,1,0）");
 

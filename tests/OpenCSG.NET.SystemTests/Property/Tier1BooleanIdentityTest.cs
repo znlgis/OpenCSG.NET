@@ -23,15 +23,15 @@ namespace Csg.Test
                 yield return new TestCaseData(seeds[i], Corpus.TierOf(i)).SetName($"Smoke_{i:D2}_{Corpus.TierOf(i)}");
         }
 
-        // ---- DEFECT-003 的语料豁免（brief Step 4 允许的唯一形式：按 index 豁免 + 注明编号与理由）----
-        // DEFECT-003：Survey 档（|坐标| ≈ 1e6）下 Union 损坏几何 —— 重合面被重复保留或整体丢失，
-        // 有向体积最多偏差 47%。以下是逐种子实测失败的集合（Normal 档 40 个种子全部通过）。
-        // 见 tests/DEFECTS.md 与 task-7-report.md 的最小复现。
-        static readonly HashSet<int> InclusionExclusionDefectSeeds =
-            new HashSet<int> { 41, 43, 45, 47, 48, 49, 52, 53, 54, 55, 56, 57, 58, 59, 60, 63 };
+        // ---- DEFECT-003 语料豁免（**已清空**，2026-10-14 修复轮）----
+        // 原缺陷：Survey 档（|坐标| ≈ 1e6）下 Union 损坏几何（重合面重复保留/丢失，体积最大偏差 47%）。
+        // 根因：Plane.Transform 用「平面三点重建」在 ~1e6 平移下发生灾难性抵消（W 漂移达 5e-5 >
+        // Plane.EPSILON 1e-5 ⇒ 共面判定失效）；修复为精确仿射映射 (A⁻ᵀ·n, W + n·t)。
+        // 原豁免集合（InclusionExclusion 16 个 / UnionSelf 19 个）修复后全部通过 ⇒ 集合清空，
+        // [Explicit] 标注随之移除（原集合清单与逐种子分析留档于修复轮报告与 DEFECTS.md 行）。
+        static readonly HashSet<int> InclusionExclusionDefectSeeds = new HashSet<int>();
 
-        static readonly HashSet<int> UnionSelfDefectSeeds =
-            new HashSet<int> { 41, 43, 44, 45, 46, 47, 48, 49, 51, 52, 53, 54, 55, 56, 58, 59, 60, 61, 63 };
+        static readonly HashSet<int> UnionSelfDefectSeeds = new HashSet<int>();
 
         static IEnumerable<TestCaseData> CasesWithDefectExclusions(HashSet<int> defectSeeds)
         {
@@ -233,14 +233,16 @@ namespace Csg.Test
 
         /// <summary>
         /// 空集是 ∪ 的单位元、∩ 的零元。
-        /// **与上面的自反性质分开成独立用例**：空操作数会命中 DEFECT-002（`empty.Subtract(X)` 返回翻转绕序的 X；
+        /// **与上面的自反性质分开的独立用例**：修复前空操作数会命中 DEFECT-002（`empty.Subtract(X)` 返回翻转绕序的 X；
         /// `empty.Intersect(X)` 与 `X.Intersect(empty)` 都返回 X —— 见 `tests/DEFECTS.md`），
-        /// 那组断言当前必须标 `[Explicit]`。若混在一个方法里，整条自反性质会被一起排除，
-        /// 那会让真正能跑的断言失去保护。
+        /// 故当时整组标 `[Explicit]` 排除；DEFECT-002 已修复（`Solid.Union`/`SubtractSub`/`IntersectSub`
+        /// 空操作数短路），本用例转正为常绿回归。
+        /// "≈ A" 两条用 <see cref="SelfIdentitySlack"/>：`Union`/`Subtract` 结果必过
+        /// 重剖分+规范化，Survey 档该管线本身的求和噪声远超绝对 1e-6（与自反用例同因），
+        /// 但语义错误（如 ∅−X 返回翻转 X、X∩∅ 返回 X）都是整体量级偏差，尺度化容差照样接住。
         /// </summary>
         [TestCaseSource(nameof(SmokeCases))]
         [Category("Smoke")]
-        [Explicit("DEFECT-002: 空操作数布尔运算语义错误（empty.Subtract/Intersect 返回错误结果）")]
         public void IdentityElement_WithEmptyOperand(long seed, CoordTier tier)
         {
             var (specA, specB) = SolidGen.RandomPair(seed, tier);
@@ -248,11 +250,12 @@ namespace Csg.Test
             var b = SolidGen.Materialize(specB);
             var empty = new Solid();
 
+            var volumeA = GeometryAssert.SignedVolume(a);
             Assert.That(GeometryAssert.SignedVolume(a.Union(empty)),
-                Is.EqualTo(GeometryAssert.SignedVolume(a)).Within(Tol),
+                Is.EqualTo(volumeA).Within(SelfIdentitySlack(volumeA)),
                 $"{Describe(seed, tier)}: A ∪ ∅ ≠ A");
             Assert.That(GeometryAssert.SignedVolume(a.Subtract(empty)),
-                Is.EqualTo(GeometryAssert.SignedVolume(a)).Within(Tol),
+                Is.EqualTo(volumeA).Within(SelfIdentitySlack(volumeA)),
                 $"{Describe(seed, tier)}: A − ∅ ≠ A");
             Assert.That(GeometryAssert.SignedVolume(a.Intersect(empty)),
                 Is.EqualTo(0.0).Within(Tol),

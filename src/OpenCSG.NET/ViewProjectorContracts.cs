@@ -158,14 +158,72 @@ public sealed class ViewProjection
         Segments = segments;
         Arcs = arcs ?? Array.Empty<ViewArc>();
 
-        var points = new List<ViewPoint2>(segments.Count * 2);
+        var points = new List<ViewPoint2>(segments.Count * 2 + Arcs.Count * 6);
         foreach (var segment in segments)
         {
             points.Add(segment.Start);
             points.Add(segment.End);
         }
+
+        // 弧极值并入包络（DEFECT-009 修复）：被弧吸收的折线已从 Segments 移除，只看线段会把
+        // 全弧视图的包络退化为 (0,0,0,0)（= ViewBounds2.Empty 哨兵，与「无几何」不可区分）。
+        // 取**精确弧盒**：整圆 ⇒ 全圆外接盒；开口弧 ⇒ 两端点 + 扫掠范围内的轴极值点（0/90/180/270°）。
+        // 不用「保守全圆盒」：拟合出的浅弧半径可远大于几何尺度（实测某类弧 R≈280、扫掠 30°），
+        // 全圆盒会把包络撑到几何之外（如 64 宽视图撑到 515），破坏落图定位。
+        foreach (var arc in Arcs)
+        {
+            if (arc.IsClosed)
+            {
+                points.Add(new ViewPoint2(arc.Center.X - arc.Radius, arc.Center.Y - arc.Radius));
+                points.Add(new ViewPoint2(arc.Center.X + arc.Radius, arc.Center.Y + arc.Radius));
+                continue;
+            }
+
+            // 扫掠角归一化用**取模**而非逐次减 2π：非有限值（±∞/NaN 经公开 ctor 可构造，
+            // 序列化守卫会拒绝）在减法下恒不收敛会死循环；超大有限值减法则近似无限次循环。
+            // 非有限扫掠按整圆保守并入包络（无效输入不该让包络构造挂起或抛错——该输入的下游
+            // 消费者 ViewJson.Serialize 有自己的守卫）。
+            var sweep = arc.EndAngle - arc.StartAngle;
+            if (double.IsNaN(sweep) || double.IsInfinity(sweep))
+            {
+                points.Add(new ViewPoint2(arc.Center.X - arc.Radius, arc.Center.Y - arc.Radius));
+                points.Add(new ViewPoint2(arc.Center.X + arc.Radius, arc.Center.Y + arc.Radius));
+                continue;
+            }
+
+            sweep %= 2 * Math.PI;
+            if (sweep < 0) sweep += 2 * Math.PI;
+            if (sweep <= 0)
+            {
+                // 起点=终点（或整圈倍数）：按整圆保守处理，宁可外扩也不退化到空。
+                points.Add(new ViewPoint2(arc.Center.X - arc.Radius, arc.Center.Y - arc.Radius));
+                points.Add(new ViewPoint2(arc.Center.X + arc.Radius, arc.Center.Y + arc.Radius));
+                continue;
+            }
+
+            points.Add(ArcPoint(arc, arc.StartAngle));
+            points.Add(ArcPoint(arc, arc.EndAngle));
+
+            for (var quadrant = 0; quadrant < 4; quadrant++)
+            {
+                var angle = quadrant * Math.PI / 2;
+                var delta = angle - arc.StartAngle;
+                if (double.IsNaN(delta) || double.IsInfinity(delta))
+                    continue;
+                delta %= 2 * Math.PI;
+                if (delta < 0) delta += 2 * Math.PI;
+                if (delta <= sweep)
+                    points.Add(ArcPoint(arc, angle));
+            }
+        }
+
         Bounds = ViewBounds2.Of(points);
     }
+
+    static ViewPoint2 ArcPoint(ViewArc arc, double angle)
+        => new ViewPoint2(
+            arc.Center.X + arc.Radius * Math.Cos(angle),
+            arc.Center.Y + arc.Radius * Math.Sin(angle));
 
     public ViewDirection Direction { get; }
 

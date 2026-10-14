@@ -27,10 +27,10 @@ namespace Csg.Test
     /// ASCII 325→319 段（弧 3→6）—— 该视图视线沿孔轴以外的掠射方向，孔缘属 DEFECT-004 机制② / DEFECT-005
     /// 的栅格量化敏感域，输入坐标 1e-7 级扰动即可翻转可见/隐藏分类。段数差异超出「无据放宽」允许的范围，
     /// 故该视图排除出逐段比较；为防「排除 = 零覆盖」，直接投影侧与读回侧同用弱界（段数 325±20、
-    /// 弧数 ≥3，见用例）—— 第三跑（run 38514979215）实测直接投影左视段数 **Windows 325 → ubuntu 330**，
-    /// 「直接投影数值稳定」的旧精确钉已按 DEFECT-011 作废（同族 ULP→阈值→拓扑翻转；Windows 实测钉值
-    /// 留档 S=325、A=3）。既有 <c>Tier5OcclusionOracleTest.cs:51-56</c> 也把 DrilledPlate 左视排除在
-    /// oracle 覆盖之外。</item>
+    /// 弧数，见用例）—— 第三跑（run 38514979215）实测直接投影左视段数 **Windows 325 → ubuntu 330**
+    /// （掠射碎片域的 DEFECT-011 平台翻转）。**DEFECT-004/005 修复后该视图碎片收整：直接投影左视
+    /// 实测 5 段/2 弧**（Windows；碎片自遮挡与成链截断双双修复），弱界随之改为段数 [3,9]、弧 ≥2。
+    /// 既有 <c>Tier5OcclusionOracleTest.cs:51-56</c> 也把 DrilledPlate 左视排除在 oracle 覆盖之外。</item>
     /// </list>
     /// </para>
     /// <para>
@@ -77,11 +77,14 @@ namespace Csg.Test
             new("Box10x20x30", () => Solids.Cube(new Vector3D(10, 20, 30), center: true), 12,
                 new[] { "主视", "俯视", "左视" }, 0.0, 0.0, 0.0, 0),
             new("LShape", OcclusionFixtures.LShape, 20,
-                new[] { "主视", "俯视", "左视" }, 0.0, 0.0, 0.0, 4),
+                new[] { "主视", "俯视", "左视" }, 0.0, 0.0, 0.0, 3),
             new("BoxesShifted", OcclusionFixtures.BoxesShifted, 24,
                 new[] { "主视", "俯视", "左视" }, 0.0, 0.0, 0.0, 2),
+            // DrilledPlate 隐藏段下限：DEFECT-010/004 修复后远侧长棱的中段遮挡 + 另一视图各 1 段
+            // 合计 2（修复前 8 里的其余 6 段是分解缝伪线/孔缘碎段——碎段已改由弧表达、伪线已剔除），
+            // 下限随实测重钉（防「夹具无遮挡」空转仍由 0 被排除保证）。
             new("DrilledPlate", OcclusionFixtures.DrilledPlate, 656,
-                new[] { "主视", "俯视" }, 1e-6, 2e-6, 1e-6, 8),
+                new[] { "主视", "俯视" }, 1e-6, 2e-6, 1e-6, 2),
         };
 
         static IEnumerable<TestCaseData> FixtureCases()
@@ -115,11 +118,11 @@ namespace Csg.Test
                 : null;
             if (excludedLeft != null)
             {
-                Assert.That(Math.Abs(excludedLeft.Segments.Count - 325), Is.LessThanOrEqualTo(20),
-                    $"{name}：直接投影左视段数 {excludedLeft.Segments.Count} 超出 325±20 弱界"
-                    + "（Windows 实测 325 / ubuntu run 38514979215 实测 330）");
-                Assert.That(excludedLeft.ArcCount, Is.GreaterThanOrEqualTo(3),
-                    $"{name}：直接投影左视弧数 {excludedLeft.ArcCount} < 3（Windows 实测 3；DEFECT-011 稳健弱界）");
+                Assert.That(Math.Abs(excludedLeft.Segments.Count - 6), Is.LessThanOrEqualTo(3),
+                    $"{name}：直接投影左视段数 {excludedLeft.Segments.Count} 超出 6±3 弱界"
+                    + "（DEFECT-004/005 修复后 Windows 实测 5；修复前 325/330 的碎片域已收整）");
+                Assert.That(excludedLeft.ArcCount, Is.GreaterThanOrEqualTo(2),
+                    $"{name}：直接投影左视弧数 {excludedLeft.ArcCount} < 2（Windows 实测 2；修复前 3/4）");
             }
 
             try
@@ -147,17 +150,16 @@ namespace Csg.Test
                     // ③ 读回投影 vs 原 Solid 直接投影（视图子集 + 每格式容差见夹具表与类注释）。
                     var viaStl = new ViewProjector(readBack).Project(ViewDirections.OrthographicThree);
 
-                    // DrilledPlate 左视弱拓扑钉（读回侧）：掠射栅格量化域（DEFECT-004 机制② / DEFECT-005），
-                    // 段数实测 bin 338 / ascii 319（Windows，相对直接 325 浮动 +13/−6；直接侧本身也属
-                    // DEFECT-011 浮动域 —— ubuntu 实测 330）、弧 4/6 ⇒ 只设 325±20 与 ≥3 的松界 ——
-                    // 该域读数钉死会随分类翻转而碎；松界仍能抓 0==0 空转与量级级回归。
+                    // DrilledPlate 左视弱拓扑钉（读回侧）：DEFECT-004/005 修复后碎片收整，
+                    // 读回与直接投影同为 5 段/2 弧（Windows 实测，两格式一致；修复前 bin 338 / ascii 319）。
+                    // 仍留 ±5 与 ≥2 的松界吸收 STL float32 存储与平台浮动（抓 0==0 空转与量级级回归）。
                     if (excludedLeft != null)
                     {
                         var readLeft = viaStl.Single(v => v.Direction.Name == "左视");
-                        Assert.That(Math.Abs(readLeft.Segments.Count - excludedLeft.Segments.Count), Is.LessThanOrEqualTo(20),
-                            $"{name}/{format}：读回左视段数 {readLeft.Segments.Count} 超出直接投影 {excludedLeft.Segments.Count}±20 弱界");
-                        Assert.That(readLeft.ArcCount, Is.GreaterThanOrEqualTo(3),
-                            $"{name}/{format}：读回左视弧数 {readLeft.ArcCount} < 3（实测 bin 4 / ascii 6）");
+                        Assert.That(Math.Abs(readLeft.Segments.Count - excludedLeft.Segments.Count), Is.LessThanOrEqualTo(5),
+                            $"{name}/{format}：读回左视段数 {readLeft.Segments.Count} 超出直接投影 {excludedLeft.Segments.Count}±5 弱界");
+                        Assert.That(readLeft.ArcCount, Is.GreaterThanOrEqualTo(2),
+                            $"{name}/{format}：读回左视弧数 {readLeft.ArcCount} < 2（实测 2）");
                     }
 
                     var selected = direct.Select((v, i) => (View: v, Index: i))

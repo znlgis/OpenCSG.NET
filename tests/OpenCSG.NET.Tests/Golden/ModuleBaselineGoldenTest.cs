@@ -117,10 +117,9 @@ namespace Csg.Test
         {
             // 斜边角第二基线：采用图纸实测件参数（宽 375 / 孔心高 340 / R125 ⇒ 名义 ≈70.90°），
             // 先用 TabbedPlateSlantAngleDeg 钉住角度语义，再钉整件 STL。
-            // 注：简报原拟 θ≈10° 浅斜边参数域，实测该域肩部矩形只覆盖 [zLeft, zLeft+R·sinθ]，
-            // θ<30° 时覆盖不足到「圆头顶与盒顶相接处」⇒ 圆头外侧残留平台 + 竖壁台阶
-            // （已登记 DEFECT-008，复现测试 D8TabbedPlateShallowSlantTest），
-            // 故基线落在构造干净（θ>30°）的参数域。
+            // 注：简报原拟 θ≈10° 浅斜边参数域；该域曾因肩部欠覆盖残留平台 + 竖壁台阶（DEFECT-008，
+            // 2026-10-14 已修复——θ<30° 时肩部自动覆盖到孔心；本基线属 θ≥30° 域，输出逐字节不变，
+            // 回归测试 D8TabbedPlateShallowSlantTest 锚定浅斜域修复后读数）。
             const double xCenter = 0, thickness = 20, zLeft = 50, width = 375;
             const double yBottom = 0, yCenter = 340, headRadius = 125, holeRadius = 40;
 

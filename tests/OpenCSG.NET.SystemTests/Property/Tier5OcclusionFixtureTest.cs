@@ -70,16 +70,17 @@ namespace Csg.Test
             // 俯视轮廓 = 全矩形减去该象限（L 形）。
             // 视线沿网格 z = CSG y（棱柱轴）⇒ 远侧(CSG y=−5)棱边被近侧同一截面的材料遮挡，
             // 实测两条隐藏段都在实体自身轮廓上/内：(4.978,−10)→(−5,−10) 是 v=−10 的远侧棱边；
-            // (0,9.978)→(0,−10) 恒在 h=0（CSG z=0 高度）上、跨满 v 全宽：v∈[0,10] 段为缺口底棱的
-            // 远侧拷贝（CSG y=−5 处），v∈[−10,0] 段为求值器把远侧面（CSG y=−5）分解成两个共面
-            // 四边形（共享 z=0、x∈[−10,0] 边）留下的多边形分解缝 —— 不是几何棱边、也不是三角剖分扇对角线。
+            // (0,9.978)→(0,0) 是缺口底棱的远侧拷贝（CSG y=−5 处）—— 同一屏线原含
+            // v∈[−10,0] 的**多边形分解缝**（求值器把远侧面分解成两个共面四边形（共享 z=0、
+            // x∈[−10,0] 边）留下的接缝），该缝段已由 DEFECT-010 修复剔除（修复前第二段为
+            // (0,9.978)→(0,−10) 全长 19.978、隐藏总长 29.956）。
             // 注：任务书给的矩形 [−5,5]×[−10,0]（把遮挡体只当成未缺料的 v≤0 半边 —— 该半边任一 h
             // 都有材料，故 v 上界只取到 0）装不下上面第二条 —— 其起点 (0,9.978) 已在矩形外。
             // 故此处取实体自身轮廓包络 [−5,5]×[−10,10]（= 视图包络本身，棱柱轴视图下能取的最紧界）：
             // 该矩形等于包络 ⇒ 包含断言在本视图不可能抓出假隐藏（任何采样点都在包络内），只作所断言
             // 区域的漂移守卫；假隐藏的判定由 Task 2 的逐点 ray-cast oracle 承担。详见 Task 3 报告。
             AssertHiddenWithin(view, -5.0, 5.0, -10.0, 10.0, "实体自身轮廓包络");
-            AssertHiddenLength(view, expected: 29.956); // 实测 29.955703
+            AssertHiddenLength(view, expected: 19.956); // 实测 19.955703（9.978+9.978；DEFECT-010 修复后）
             AssertCounting(view, expectedVisible: 6, expectedHidden: 2);
         }
 
@@ -92,9 +93,11 @@ namespace Csg.Test
             // = CSG z（台阶抬升轴，实体沿该轴有台阶变化）—— 近侧材料（台阶顶面 h∈[0,10] 与缺口底面
             // h∈[−10,0]，v∈[−5,5]）的投影已覆盖整个包络 = 实体整体轮廓，矩形包含断言退化为恒真，
             // 故只钉长度 + 计数。
-            // 实测两条隐藏段：(0,4.978)→(0,−5)（CSG x=0 面远侧竖边）、(0,−5)→(10,−5)（CSG y=−5 远侧端棱）。
-            AssertHiddenLength(view, expected: 19.978); // 实测 19.977827
-            AssertCounting(view, expectedVisible: 5, expectedHidden: 2);
+            // 实测 1 条隐藏段：(0,4.978)→(0,−5)（CSG x=0 面远侧竖边）；原第二条 (0,−5)→(10,−5)
+            // 是远侧面（CSG y=−5）两个共面四边形的分解缝（同一屏线），已由 DEFECT-010 修复剔除
+            // （修复前隐藏总长 19.978、2 段 —— 旧注释把它误标为「远侧端棱」，实为缝段）。
+            AssertHiddenLength(view, expected: 9.978); // 实测 9.977827（DEFECT-010 修复后）
+            AssertCounting(view, expectedVisible: 5, expectedHidden: 1);
         }
 
         [Test]
@@ -105,13 +108,14 @@ namespace Csg.Test
             // 区域推导：板 = 20×20×4 CSG 盒、R=3 球（穿出 z=±2 板面）。主视取轴
             // h=−mesh_y、v=mesh_z（ViewProjectorContracts:88-89）；mesh↔CSG 为 mesh=(x,z,y)
             // ⇒ 板截面 = mesh y(=CSG z)∈[−2,2] → h∈[−2,2]；mesh z(=CSG y)∈[−10,10] → v∈[−10,10]。
-            // 空腔远侧轮廓（实测 5 条隐藏段：(−2,9.978)→(−2,−10) 是 CSG z=2 面上 CSG x=+10 远侧的长棱，
-            // 另 4 条为远侧孔缘碎段，|h| ≤ 2）全在这块「近侧板面轮廓」内。
+            // 空腔远侧轮廓（DEFECT-004 修复后实测 **1 条**隐藏段：(−2,9.978)→(−2,−10.000) 是
+            // CSG z=2 面上 CSG x=+10 远侧的长棱 19.978；原「另 4 条远侧孔缘碎段」已随成链取向修复
+            // 被孔缘弧整体吸收、不再以折线段出现）全在这块「近侧板面轮廓」内。
             // 该矩形 = 视图包络本身（bounds h[−2,2] v[−10,10]）⇒ 包含断言不可能被违反，仅为所断言
             // 区域的漂移守卫（同 LShape 俯视）；假隐藏的判定由 Task 2 的逐点 ray-cast oracle 承担。
             AssertHiddenWithin(view, -2.0, 2.0, -10.0, 10.0, "近侧板面轮廓");
-            AssertHiddenLength(view, expected: 22.016); // 实测 22.016323
-            AssertCounting(view, expectedVisible: 4, expectedHidden: 5);
+            AssertHiddenLength(view, expected: 19.978); // 实测 19.977900（DEFECT-004 修复后）
+            AssertCounting(view, expectedVisible: 4, expectedHidden: 1);
         }
 
         [Test]
@@ -125,11 +129,14 @@ namespace Csg.Test
             // 见任务书脚注 ②）、v∈[−10,10]：实测 3 条隐藏段为两条远侧孔缘碎段
             // (1.148,2.772)→(1.667,2.494) 与 (1.667,2.494)→(2,2.221)（同一孔缘折线的相邻两段），
             // 以及远侧长棱 (−2,10)→(−2,−10)（CSG z=2 面与 CSG y=−10 侧面的交线，h 恒 = −2）。
+            // 演进：DEFECT-010 修复后长棱的隐藏读数只余**中段**（外侧两段来自同线分解缝幻线、已被
+            // 剔除）；**DEFECT-004/005 修复后**孔缘碎段大幅收整（远端缘大多并入弧），实测 2 条隐藏段：
+            // 长棱中段 (−2,2.178)→(−2,−2.178) 4.356 + 一条孔缘碎段 (0.585,2.942)→(1.148,2.772) 0.588。
             // 该矩形 ⊇ 视图包络（bounds h[−2,2] v[−10,10]）⇒ 包含断言不可能被违反，仅为所断言区域
             // 的漂移守卫（同 LShape 俯视/DrilledPlate 主视）；假隐藏的判定由 Task 2 的 ray-cast oracle 承担。
             AssertHiddenWithin(view, -5.0, 5.0, -10.0, 10.0, "板面∪孔腔轮廓（保守）");
-            AssertHiddenLength(view, expected: 21.019); // 实测 21.01926
-            AssertCounting(view, expectedVisible: 4, expectedHidden: 3);
+            AssertHiddenLength(view, expected: 4.9445); // 实测 4.944526（DEFECT-004/005 修复后）
+            AssertCounting(view, expectedVisible: 4, expectedHidden: 2);
         }
 
         /// <summary>取三视图投影里名为 <paramref name="name"/> 的视图；缺失即失败（防夹具/方向改名后的静默空转）。</summary>
