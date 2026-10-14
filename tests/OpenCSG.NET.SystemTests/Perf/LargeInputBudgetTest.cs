@@ -54,11 +54,16 @@ namespace Csg.Test
             var trees = PerfWorkloads.DeepTrees();
             Assert.That(trees.Count, Is.EqualTo(8));
 
-            // 非空转守卫 + 确定性读数：8 棵树（深度 5）求值后的多边形总数实测 518。
+            // 非空转守卫 + 确定性读数：8 棵树（深度 5）求值后的多边形总数 —— Windows 实测 518、
+            // ubuntu 第三跑（run 38514979215）实测 517（DEFECT-011：布尔求值的面数记账在平台 libm
+            // ULP 差下 ±1 级浮动，两平台输出同为同一几何的有效近似）。故钉窄带 515..521（两侧各留
+            // 3 格 ≈ ±0.6%：容纳平台浮动，仍能抓空转 0、树缺失/求值失败与量级级回归）；本用例核心
+            // 是下方墙钟预算（保持精确）。
             var polygons = 0;
             foreach (var tree in trees)
                 polygons += CsgEvaluator.Evaluate(tree).Polygons.Count;
-            Assert.That(polygons, Is.EqualTo(518), $"8 棵深树求值多边形总数实测 {polygons}（钉值 518）");
+            Assert.That(polygons, Is.InRange(515, 521),
+                $"8 棵深树求值多边形总数实测 {polygons}（DEFECT-011 稳健带 515..521；Windows 518 / ubuntu 517）");
 
             // 计时口径 = 工具套件 Evaluate 项同款（一趟 = 依序求值 8 棵树；其中 seed 3/6 各 ≈45ms）。
             var measured = BudgetClock.MinMs(3, 1, () =>

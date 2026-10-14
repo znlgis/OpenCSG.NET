@@ -26,9 +26,11 @@ namespace Csg.Test
     /// <item><b>DrilledPlate 左视不参与逐段比较（改设弱拓扑钉）</b>：实测二进制 325→338 段（V 165→170、弧 3→4）、
     /// ASCII 325→319 段（弧 3→6）—— 该视图视线沿孔轴以外的掠射方向，孔缘属 DEFECT-004 机制② / DEFECT-005
     /// 的栅格量化敏感域，输入坐标 1e-7 级扰动即可翻转可见/隐藏分类。段数差异超出「无据放宽」允许的范围，
-    /// 故该视图排除出逐段比较；为防「排除 = 零覆盖」，改钉直接投影拓扑（S=325、A=3，数值稳定）+
-    /// 读回侧弱界（段数 325±20、弧数 ≥3，见用例）。既有 <c>Tier5OcclusionOracleTest.cs:51-56</c>
-    /// 也把 DrilledPlate 左视排除在 oracle 覆盖之外。</item>
+    /// 故该视图排除出逐段比较；为防「排除 = 零覆盖」，直接投影侧与读回侧同用弱界（段数 325±20、
+    /// 弧数 ≥3，见用例）—— 第三跑（run 38514979215）实测直接投影左视段数 **Windows 325 → ubuntu 330**，
+    /// 「直接投影数值稳定」的旧精确钉已按 DEFECT-011 作废（同族 ULP→阈值→拓扑翻转；Windows 实测钉值
+    /// 留档 S=325、A=3）。既有 <c>Tier5OcclusionOracleTest.cs:51-56</c> 也把 DrilledPlate 左视排除在
+    /// oracle 覆盖之外。</item>
     /// </list>
     /// </para>
     /// <para>
@@ -103,15 +105,21 @@ namespace Csg.Test
             var binaryPath = TempStlPath(name, "bin");
             var asciiPath = TempStlPath(name, "ascii");
 
-            // DrilledPlate 左视弱拓扑钉（直接投影侧）：该视图不进逐段比较（理由见类注释），
-            // 但直接投影数值稳定 ⇒ 拓扑实测钉死（S=325、A=3），防「排除 = 零覆盖」。
+            // DrilledPlate 左视弱拓扑钉（直接投影侧）：该视图不进逐段比较（理由见类注释）。
+            // DEFECT-011（直接投影侧并非「数值稳定」）：掠射视图的栅格/拟合分类随平台 libm ULP 差翻转 ——
+            // 第三跑（run 38514979215）实测段数 Windows 325 → ubuntu 330。故与读回侧同口径弱界
+            // （段数 325±20、弧数 ≥3；Windows 实测钉值留档 S=325、A=3），防「排除 = 零覆盖」，
+            // 仍能抓 0==0 空转与量级级回归（见 DEFECT-004 机制② / DEFECT-005 的同域记载）。
             var excludedLeft = name == "DrilledPlate"
                 ? direct.Single(v => v.Direction.Name == "左视")
                 : null;
             if (excludedLeft != null)
             {
-                Assert.That(excludedLeft.Segments.Count, Is.EqualTo(325), $"{name}：直接投影左视段数（实测钉）");
-                Assert.That(excludedLeft.ArcCount, Is.EqualTo(3), $"{name}：直接投影左视弧数（实测钉）");
+                Assert.That(Math.Abs(excludedLeft.Segments.Count - 325), Is.LessThanOrEqualTo(20),
+                    $"{name}：直接投影左视段数 {excludedLeft.Segments.Count} 超出 325±20 弱界"
+                    + "（Windows 实测 325 / ubuntu run 38514979215 实测 330）");
+                Assert.That(excludedLeft.ArcCount, Is.GreaterThanOrEqualTo(3),
+                    $"{name}：直接投影左视弧数 {excludedLeft.ArcCount} < 3（Windows 实测 3；DEFECT-011 稳健弱界）");
             }
 
             try
@@ -140,8 +148,9 @@ namespace Csg.Test
                     var viaStl = new ViewProjector(readBack).Project(ViewDirections.OrthographicThree);
 
                     // DrilledPlate 左视弱拓扑钉（读回侧）：掠射栅格量化域（DEFECT-004 机制② / DEFECT-005），
-                    // 段数实测 bin 338 / ascii 319（相对直接 325 浮动 +13/−6）、弧 4/6 ⇒ 只设 325±20 与 ≥3 的
-                    // 松界 —— 该域读数钉死会随分类翻转而碎；松界仍能抓 0==0 空转与量级级回归。
+                    // 段数实测 bin 338 / ascii 319（Windows，相对直接 325 浮动 +13/−6；直接侧本身也属
+                    // DEFECT-011 浮动域 —— ubuntu 实测 330）、弧 4/6 ⇒ 只设 325±20 与 ≥3 的松界 ——
+                    // 该域读数钉死会随分类翻转而碎；松界仍能抓 0==0 空转与量级级回归。
                     if (excludedLeft != null)
                     {
                         var readLeft = viaStl.Single(v => v.Direction.Name == "左视");
