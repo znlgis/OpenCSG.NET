@@ -729,3 +729,67 @@ $ find tests/OpenCSG.NET.Tests/Results -name '*_.stl' -o -name '*_.json' | wc -l
 - **`Runner.Examples` 的 `Process.Start` 未加环境守卫**（D4 审查指出；本计划范围仅 CPurlin）——Plan E/F 或样例清理时处理。
 - **D2 字节级 STL 基线在 autocrlf=false 的 Windows 克隆上会失配**（`ToStlString` 走 `Environment.NewLine`）——`ModuleBaselineGoldenTest` 注释已披露；稳健方案（写出器显式 `\n`）属后续决策。租用清单：D3 审查建议给 `.stl` 基线也做 `.gitattributes` 或改写出器。
 - **DEFECT-009 修复后的 golden 重基线化**是预期动作（Cylinder_ThreeViews 等）。
+
+## Plan E — L6 性能/复杂度 + L7 稳健性/并行/跨运行时（2026-10-14）
+
+承接 spec §13 与阶段表第 6 阶段。本计划含 `perf/`、`tools/`、`samples/`（Runner.Examples 守卫）与 `tests/` 改动；`src/` 零改动。
+
+### L6 性能与复杂度
+
+- **基准（11 项操作）**：`perf/OpenCSG.NET.PerfTest/PerfSuite.cs` 确定性停表套件（预热 3 轮、N=5、min+median 双统计；刻意保留分层编译+动态 PGO——实测关闭会使 Clean 20k 中位数 ~605ms→~1830ms）。
+  提交基线 `perf/baseline.json`（median/min ms）：Union 66.9/56.3、Intersect 27.9/25.6、Evaluate 26.6、ToJson、FromJson、TrianglesOf、WriteAscii 50.2、WriteBinary 97.9、Project 111.1、Fit 31.4、Clean 327.5。
+- **25% 门禁**（`--gate`）：判据 = min 超基线 ×1.25 ⇒ exit 1；**快操作（基线 min <20ms）为信息项只报告**；失败项**自动重测一次取更好 min**；判别力实测（基线 ×0.7 ⇒ exit 1 列出超阈项）。**噪声限已实测并文档化**：系统负载下可现「整轮机器状态被抬高」（实测 WriteAscii 中位数 ×1.28 超阈而 min ×0.83 未超 ⇒ 噪声判定路径触发）；收口日有一次连跑后 `gate=1`、随后两次重跑 exit 0（口径：nightly 信号，非 PR 硬门，见工具类注释）。
+- **复杂度标度**：Clean 5k=33.2ms / 20k(min)=572.1ms，**20k/5k = 17.59（O(n²) 理论 ≈16；上限 32，PGO 关闭时实测 24.54 ⇒ 余量 1.3× 已在注释声明）**；Project 三视图 5k=208.6 / 20k=900.1，比值 4.38（线性，仅记录）。
+- **边界（6 个 `[Category("Perf")]` 用例，预算一律实测 ×5 并在断言消息带协议）**：
+  - **`MaxEdgeSamples=4000` 上限对水密网格不可达**（1e6 圆柱三视图实测 901/234/901 采样；开放/丢面网格可及——措辞已收窄）；
+  - **薄板凸台分解缝幻线 = DEFECT-010**：1000mm 板上凸台在左视投影出 **2 条 450mm 长的凭空实线**（v=±50 贯穿整板，实测 8V+2H / hiddenLen 198.790111）——CSG 求值 T 接缝单侧边的可见化伪影，已登记并按行为钉住；
+  - 薄板三视图不挂起预算、Clean/Rroject/Evaluate 预算、深度栅格三视图预算。
+- 并发公平性：Perf 夹具已真正 `[NonParallelizable]`（TRX 区间分析实证：6 个 Perf 用例成为连续块、与 1103 个并行用例零重叠）。
+
+### L7 稳健性/并行/跨运行时
+
+- **并行整套件（opt-in）**：`tests/ParallelRun.runsettings`（4 worker）+ 两程序集 `[assembly: Parallelizable(Fixtures)]` + `LevelOfParallelism(1)`（默认仍串行；B1 的「默认保持串行」契约不破）。**首跑即实证 DEFECT-001 串扰**（Tests 341/342：契约用例读到另一 worker 的 `LastDiagnostics`）⇒ 受影响夹具 `[NonParallelizable]` + 确定性并行复现 `[Explicit]`（双屏障定序、两条断言按设计失败）。并行 ×8（SystemTests）/×4（Tests）全绿、计数与串行一致。
+- **`TessellationScope` 跨线程**：并发 scope 互不串扰、异常路径复位、父子线程 `[ThreadStatic]` 隔离——3 用例串行+并行双绿。
+- **`Solid.GetTag()`**：审计（全仓零 tag 值依赖）+ 5 用例（单调唯一/惰性稳定/只读契约/默认共享/8×250 并发唯一）。
+- **跨运行时确定性**：`tools/OpenCSG.NET.CrossRuntime/`（net8.0+net10.0）：语料子集求值+三视图+序列化+STL 的逐阶段与组合 SHA256——两 TFM × 各两次**完全一致**（`combined=97f2f11d…def75`）。
+- **soak**：SystemTests 连跑 **25/25 全绿**（TRX 全开、零 Failed；累计 51 次）——历史单次偶发失败仍未复现，结论入报告。
+- **`Runner.Examples`** 补 `OPENCSG_OPEN_VIEWER == "1"` 守卫（承接 D4 观察项）。
+
+### DEFECTS.md 变更（本计划）
+
+- **新增 DEFECT-010**（中，只报告）：薄板+局部特征（凸台/孔）在 CSG 求值分解缝处将内部 T 接缝单侧边投影为**凭空可见长实线**（夹具/读数见上）；修复方向属 Plan F 后决策。
+- **DEFECT-001 增补**：并行整套件实跑实证串扰 + 确定性并行复现用例；受影响夹具已 `[NonParallelizable]` 隔离。
+
+### 用例与时间预算
+
+| 项 | 值 |
+| --- | --- |
+| 本计划新增用例 | SystemTests +16（6 Perf 边界/复杂度 + 3 scope + 5 tag + 2 并行机制）、Tests +1（DEFECT-001 并行复现，Explicit） |
+| SystemTests（收口） | **1109 通过 / 0 失败 / 160 NotExecuted** |
+| Tests（收口） | **342 通过 / 0 失败**（NotExecuted 8 = DEFECT-001×2 + 006×2 + 007 + 008 + 009×2） |
+| 墙钟 | Tests ~3.2 s；SystemTests ~27 s（Perf 用例 ~14 s；并行模式下 ~20–23 s）——仍 ≪ 8 分钟 |
+| perf 工具 | `--gate` exit 0（含噪声判定/重试路径实测）；`--complexity` exit 0 |
+
+### 收口验证（全量，实测输出）
+
+```text
+$ dotnet build OpenCSG.NET.slnx -c Release --no-incremental 2>&1 | tail -3
+    0 个错误
+
+$ dotnet test tests/OpenCSG.NET.Tests -c Release --no-build 2>&1 | tail -2
+已通过! - 失败:     0，通过:   342，已跳过:     0，总计:   342，持续时间: 1 s - OpenCSG.NET.Tests.dll (net8.0)
+
+$ dotnet test tests/OpenCSG.NET.SystemTests -c Release --no-build 2>&1 | tail -2
+已通过! - 失败:     0，通过:  1109，已跳过:     0，总计:  1109，持续时间: 25 s - OpenCSG.NET.SystemTests.dll (net8.0)
+
+$ dotnet run --project tools/OpenCSG.NET.CrossRuntime -c Release -f net8.0  # 与 -f net10.0 对照
+combined=sha256:97f2f11dd2490f183bb70a380c680d91a9a4f6061028b180910a088c0fddef75（两 TFM 一致）
+```
+
+`src/` 零改动；缺陷册开放 10 条（001–010）+ 已修复 3 条（A1/A2/A4），双向索引由 `DefectRegistryTest` 强制。
+
+### 观察项（未闭合，供 Plan F/收尾）
+
+- 门禁机器噪声限：负载状态下单次误报（收口日实测 1 例、重跑即绿）——Plan F 接线 nightly 时按工具注释口径处理（重跑确认/基线重生成附 diff）。
+- 历史单次偶发失败（累计 51 次未复现）——随并行前时代的单例转为并行验证后仍无痕迹；Plan F 报告定稿时作为已知限制记录。
+- `perf/baseline.json` 在换机（CI runner）后需重生成并提交 diff（工具已写入用法）。

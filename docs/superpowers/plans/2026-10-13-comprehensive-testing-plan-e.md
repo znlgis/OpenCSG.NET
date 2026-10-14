@@ -71,8 +71,13 @@
 
 ## 完成定义（Plan E）
 
-- [ ] 11 项操作基准可复跑、`perf/baseline.json` 提交、25% 门禁工具判别力自证。
-- [ ] 复杂度标度（Clean 5k/20k、Project 900²）与 6 个边界用例按「实测 × 倍数」预算落地。
-- [ ] 并行整套件两次全绿（或暴露的串扰已登记/归因）；跨线程 scope 用例；跨运行时哈希一致；soak 结论入报告。
-- [ ] `Runner.Examples` 环境守卫补齐；`Solid.GetTag` 用例与审计。
-- [ ] 全量构建 0 警告 0 错误；`Results/` 零残留；`src/` 零改动。
+**状态：已全部完成（2026-10-14，分支 `test/comprehensive-suite-plan-e`）。** 逐项核对：
+
+- [x] 11 项操作基准可复跑、`perf/baseline.json` 提交、25% 门禁判别力自证（×0.7 ⇒ exit 1；快操作信息项地板与失败重测路径实测触发；噪声限口径已文档化）。
+- [x] 复杂度标度（Clean 5k=33.2/20k=572.1min，比值 17.59 ≈ O(n²) 16、上限 32）与 6 个边界用例按「实测 ×5」预算落地；**边界发现一并登记 DEFECT-010**（薄板分解缝幻线）。
+- [x] 并行整套件 8+4 次全绿（首跑即实证 **DEFECT-001 串扰**并完成隔离/复现/登记）；跨线程 scope 3 用例；跨运行时哈希两 TFM 一致（97f2f11d…）；soak 25/25。
+- [x] `Runner.Examples` 环境守卫补齐；`Solid.GetTag` 审计+5 用例。
+- [x] 全量构建 0 警告 0 错误；`Results/` 零残留；`src/` 零改动。
+
+> 逐任务评审/fix round/核对记录与遗留观察项见 `.superpowers/sdd/2026-10-13-comprehensive-testing-plan-e/progress.md`。
+> 两处审查改判案例：E1 首轮「无 C/无 I」后由控制器补齐评审、E2 的 Critical（`[NonParallelizable]` 只写注释未应用）均由评审抓获并以 TRX 区间分析实证修复。
