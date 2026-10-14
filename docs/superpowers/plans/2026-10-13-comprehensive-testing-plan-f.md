@@ -79,9 +79,11 @@
 
 ## 完成定义（Plan F）
 
-- [ ] `global.json` 钉 SDK 10.0.4xx（含与 spec 8.2 条目 1 冲突的裁定记录）；`tests/Directory.Build.props` 落地；测试项目双 TFM 全绿。
-- [ ] 覆盖率门禁（≥85% 总体、五组 ≥90%）工具落地 + 判别力自证 + 官方对照数字入报告。
-- [ ] `ci.yml` 满足 8.2 全部 8 条（含 GoldenGuardTest 不过滤、windows 矩阵、slnx 全构建、ApiCompat 编译）；`nightly.yml` 就绪。
-- [ ] ApiCompat 五类缺口补齐；PublicApiAnalyzers 记为未批准后续项。
-- [ ] TEST-REPORT 定稿（零占位符、已知限制六项、覆盖率实际数字）；spec §13 Plan F 勾选。
-- [ ] 全量终验全绿；`src/` 除构建配置外的零改动保持。
+> 收官勾选（2026-10-14，终验实测；GitHub Actions 本体不可本地运行——CI 相关项的验证边界见各条括注）。
+
+- [x] `global.json` 钉 SDK 10.0.4xx（含与 spec 8.2 条目 1 冲突的裁定记录）；`tests/Directory.Build.props` 落地；测试项目双 TFM 全绿。 ——实测：`dotnet --version` = 10.0.402；slnx 全量 0 警告 0 错误；Tests 345/0、SystemTests 1109/0，net8.0 与 net10.0 逐位相同。
+- [x] 覆盖率门禁（≥85% 总体、五组 ≥90%）工具落地 + 判别力自证 + 官方对照数字入报告。 ——实测：`GATE PASS (exit 0)`；src 98.43%（2942/2989）、`View*` 98.25%（896/912）、四组 100%；判别力探针按预期 exit 1/exit 2；数字已入 TEST-REPORT（本地命令与 CI 逐字相同，CI 首跑以 artifacts 为准）。
+- [x] `ci.yml` 满足 8.2 全部 8 条（含 GoldenGuardTest 不过滤、windows 矩阵、slnx 全构建、ApiCompat 编译）；`nightly.yml` 就绪。 ——实测：YAML 语法校验通过；每条 `run:` 命令在 scratch 副本本地等价真跑通过（GitHub Actions 本体不可本地运行，边界已声明；Long 档无消费用例已如实登记）。
+- [x] ApiCompat 五类缺口补齐；PublicApiAnalyzers 记为未批准后续项。 ——实测：`ApiSurface.cs` +163 行（4 个 Touch 方法 + 1 个嵌套转换器）；单工程与 slnx 全量编译 0/0；命名负控 CS0246 按预期红；PublicApiAnalyzers 未动 `src/`、仅登记。
+- [x] TEST-REPORT 定稿（零占位符、已知限制六项、覆盖率实际数字）；spec §13 Plan F 勾选。 ——实测：`grep 填实际` 零匹配；终稿含逐计划用例数终审（TRX 权威口径、342→345 勘误一行）、覆盖率前后对照与实际命令、「已知限制」六项；spec §8.2 八条与 §13 Plan F 四条已勾选（见 spec 文件）。
+- [x] 全量终验全绿；`src/` 除构建配置外的零改动保持。 ——实测：build 0/0；Tests 345/0、SystemTests 1109/0（双 TFM；TRX total=353 / 1269，逐结果 NotExecuted×8 / ×160）；coverage gate exit 0；perf gate exit 0；CrossRuntime 双 TFM 哈希一致（`97f2f11d…def75`）；`Results/` 残留 0（60 STL + 15 JSON 常备资产在册）；`src/` 零改动（Plan F 全程 git diff 实证）。

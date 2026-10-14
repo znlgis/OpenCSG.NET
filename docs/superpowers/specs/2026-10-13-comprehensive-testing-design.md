@@ -234,13 +234,21 @@ sample 是顶层语句 console app，几何代码无法被测试项目引用。L
 ### 8.2 CI 改动（已批准）
 
 1. `ci.yml`：`setup-dotnet` `8.0.x` → `9.0.x`，并把 `dotnet build OpenCSG.NET.slnx` 加入 —— 现有 CI **从不编译 samples/perf**，公共 API 破坏不会被发现
+   > ✅ 已落地（Plan F，2026-10-14）：ci.yml 全构建步骤 = `dotnet build OpenCSG.NET.slnx -c Release`（13 工程全被编译：src/ApiCompat/samples/perf/tools；本地等价实测 0 警告 0 错误）。`setup-dotnet` 多行 `10.0.x` + `8.0.x` —— 本条的 `9.0.x` 与条目 3（net10 TFM）冲突，裁定统一 **10.0.x**（见条目 7）。
 2. 矩阵加 `windows-latest`（golden 机制依赖 `Environment.NewLine` 与 4 层路径推导，只在 ubuntu 验证过）
+   > ✅ 已落地：`os: [ubuntu-latest, windows-latest]`（`fail-fast: false`；注释含「某平台因换行机制转红 = 真发现，先调查取证并登记，不得静默删平台」纪律）。GitHub Actions 矩阵本体不可本地运行——两平台 golden 机制的本地等价验证（含 CRLF/LF 判别力探针）与首跑观察项见 TEST-REPORT「Plan F」节与「已知限制」⑥。
 3. 测试项目多目标 `net8.0;net10.0`
+   > ✅ 已落地：两测试项目 `<TargetFrameworks>net8.0;net10.0</TargetFrameworks>`；两 TFM 各跑全量，终验 Tests 345/0、SystemTests 1109/0 两边逐位相同（TRX 亦逐位相同）；`-f net8.0` 本地快速档已写入工程注释。
 4. 新增 nightly workflow：Long 档模糊 + perf 基线对比（非阻塞 PR）
+   > ✅ 已落地：`nightly.yml`（cron 18:30 UTC + `workflow_dispatch`）：Long 档 `OPENCSG_FUZZ_CASES=20000` + perf 门禁（`--gate perf/baseline.json`，windows-latest——基线录制机为 Windows）；独立工作流 ⇒ 非阻塞 PR。如实登记：Long 档 `Corpus.LongCaseCount()` 入口就绪且 env 覆盖经用例验证，但当前无消费用例（该步现阶段 ≈ 全量 SystemTests 复跑）。
 5. 覆盖率收集 + 阈值门禁 + 报告上传
+   > ✅ 已落地：`tests/coverage.runsettings` + `tools/coverage-gate.py`（判定口径 = 两份 cobertura 逐行并集、行计数加权；阈值 src≥85%、五组≥90%；fail-closed 退出码 0/1/2）+ cobertura 工件上传。官方对照数字（src 98.43%、`View*` 98.25%、CsgHelpers/StlWriter/CsgMesh/Tessellation 100%）已入 TEST-REPORT；判别力自证（阈值 0.999 ⇒ exit 1）与截断报告 fail-closed（exit 2）实测。数字为本地运行（命令与 CI 逐字相同），CI 首跑以 artifacts 为准。
 6. 编译 `tests/OpenCSG.NET.ApiCompat`（netstandard2.0 消费面）
+   > ✅ 已落地：由条目 1 的 slnx 全构建覆盖（ApiCompat 为 13 工程之一，编译型金丝雀）；五类命名缺口（`BoundingBox`/`BoundingSphere`/`PolygonShared`/`CsgEvaluationException`/`ViewVector`）+ `CsgSerialization` 消费侧两层钉已补齐。遗留登记：PublicApiAnalyzers + `PublicAPI.Shipped.txt` 方案需动 `src/` ⇒ 未获批准（且其盯可见 API 面，盖不住 internal `JsonReadHelpers` 的三辅助缺口）。
 7. 新增 `global.json` 固定 SDK 版本 —— 仓库当前**没有** `global.json`，`dotnet` 浮动到本机最新 SDK；阶段 0 基线实测由 SDK 10.0.401 产出，而 CI 固定 8.0.x，本地与 CI 的工具链口径不一致（由阶段 0 记录暴露）
+   > ✅ 已落地：`global.json` = `{ "sdk": { "version": "10.0.400", "rollForward": "latestFeature" } }`（本机解析 10.0.402；`latestFeature` 语义备注见 plan-f task-1-report）。`nuget-publish.yml` 因该钉导致的必然失败已一并修复（setup-dotnet 多行 10.0.x + 8.0.x）。
 8. **CI 必须以不筛选（或不含 `--filter` 排除 `GoldenGuardTest`）的方式运行 `tests/OpenCSG.NET.Tests`** —— 阶段 1 实测：NUnit3TestAdapter 4.4.2 把 `[SetUpFixture]` 的 `OneTimeTearDown` 失败记为 fixture 级错误，**不计入测试用例计数、不影响退出码**。因此 `GoldenGuard` 的 teardown 在 `--filter` 下单独存在时退出码为 0（已实测），真正让运行失败的是它的伴随用例 `GoldenGuardTest.FindPendingGoldens_OnCleanTree_IsEmpty`。全量运行（CI 的实际形态）安全；一旦 CI 改为按类别筛选，必须保证该用例不被排除
+   > ✅ 已落地：ci.yml 的 Tests 命令无任何 `--filter`（注释记录两条理由：fixture-teardown 退出码陷阱 + `--filter` 会连带**执行** Explicit 豁免种子——Task 1 实测的第二条独立佐证）；终验以全量裸命令执行（345/0 ×2 TFM，TRX NotExecuted×8 正确跳过）。
 
 ### 8.3 golden 门禁（新增强制力）
 
@@ -334,10 +342,16 @@ sample 是顶层语句 console app，几何代码无法被测试项目引用。L
 
 ### Plan F（覆盖率 + CI + 报告定稿）
 
+> **已完成（Plan F，2026-10-14，收官）**：四条全部落地；`ci.yml`/`nightly.yml` 就绪（GitHub Actions 本体不可本地运行——验证 = YAML 语法校验 + 每条 `run:` 命令的本地等价真跑）；覆盖率门禁与官方对照数字入 TEST-REPORT。各条的落地实测见下方子项与 TEST-REPORT「Plan F」节。
+
 - CI 不得过滤掉 `GoldenGuardTest`（§8.2 第 8 项）—— 实测：NUnit3TestAdapter 4.4.2 下 fixture 级 teardown 失败不影响退出码。
+  > ✅ 已落地：ci.yml 的 `dotnet test tests/OpenCSG.NET.Tests -c Release` 无任何 `--filter`（§8.2 条目 8）；终验全量裸命令 345/0 ×2 TFM（TRX：NotExecuted×8 正确跳过、total=353）。
 - ApiCompat 是手写金丝雀，有五类命名缺口（`BoundingBox`、`BoundingSphere`、`PolygonShared`、`CsgEvaluationException`、`ViewVector`，以及 `CsgSerialization` 的三个 `Utf8JsonReader` 辅助）；更彻底的方案是给 `src/` 上 `Microsoft.CodeAnalysis.PublicApiAnalyzers` + `PublicAPI.Shipped.txt`。
+  > ✅ 已落地：五类缺口 + `CsgSerialization` 消费侧两层钉已补齐（4 个 Touch 方法 + 1 个嵌套转换器，+163 行）；`PublicApiAnalyzers` 需动 `src/` ⇒ **未获批准**、登记为后续选项（其盯可见 API 面，盖不住 internal `JsonReadHelpers` 三辅助——实测 CS0122）。
 - 报告定稿要校正逐任务用例数，并把 `modreq` → 库内 `internal IsExternalInit` 的隐性运行时契约写进「已知限制」。
+  > ✅ 已落地：TEST-REPORT 终稿含「逐计划用例数终审」（A–F 段自报数与 TRX 终值逐段闭合；342→345 勘误一行）与「已知限制」六项，第 ① 条即 `modreq` 契约（含「改 `CsgNode.cs` 前必读」与消费方声明侧的边界）。
 - 考虑 `tests/Directory.Build.props` 统一 `Nullable`/`TreatWarningsAsErrors`/`LangVersion` —— 当前 TestKit 开了可空检查，而它的主要消费方 `Tests` 没开。
+  > ✅ 已落地：`tests/Directory.Build.props` 统一 `Nullable=enable` + `LangVersion=9.0`（与主工程一致）；`TreatWarningsAsErrors` 经 77 处警告普查裁定**保持关闭**（洪泛档，理由入 props 注释），77 处已按编译期零语义变化修净 ⇒ 全量构建 0 警告 0 错误。
 
 ### 留给人决定的产品问题
 

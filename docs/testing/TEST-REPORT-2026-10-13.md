@@ -793,3 +793,99 @@ combined=sha256:97f2f11dd2490f183bb70a380c680d91a9a4f6061028b180910a088c0fddef75
 - 门禁机器噪声限：负载状态下单次误报（收口日实测 1 例、重跑即绿）——Plan F 接线 nightly 时按工具注释口径处理（重跑确认/基线重生成附 diff）。
 - 历史单次偶发失败（累计 51 次未复现）——随并行前时代的单例转为并行验证后仍无痕迹；Plan F 报告定稿时作为已知限制记录。
 - `perf/baseline.json` 在换机（CI runner）后需重生成并提交 diff（工具已写入用法）。
+
+## Plan F — 覆盖率门禁 + CI 改造 + 报告定稿（2026-10-14・收官）
+
+承接 spec §13「Plan F」与阶段表第 7 阶段，为全面测试体系工程的收官计划。含 `global.json` 钉 SDK、`tests/Directory.Build.props` 统一、测试双目标（net8.0;net10.0）、覆盖率门禁（src ≥85%、五组 ≥90%）、`ci.yml` 改造与 `nightly.yml` 新建、ApiCompat 金丝雀补缺、nuget-publish 修复；本节即报告终稿。
+
+### Task 1–4 摘要（交付与裁定）
+
+- **SDK 裁定**：spec §8.2 条目 1（9.0.x）与条目 3（net10 TFM）冲突 ⇒ SDK 与 CI 统一 **10.0.x**（`global.json` 钉 `10.0.4xx`、`rollForward: latestFeature`，本机解析 10.0.402）；CI 另装 8.0.x 供 net8 测试。`nuget-publish.yml` 因 global.json 曾必然失败（原仅装 SDK 8.0.x），已随 Task 4 一并修复（多行 10.0.x + 8.0.x），发布路径恢复可用。
+- **`tests/Directory.Build.props`**：`Nullable=enable`、`LangVersion=9.0`（与主工程一致）；警告普查 77 处（全部 CS86xx 可空性、集中于 Tests 的 14 个文件）＝洪泛档 ⇒ `TreatWarningsAsErrors` **保持关闭**（裁定与理由入 props 注释）；77 处按编译期、零语义变化修净 ⇒ 全量构建 0 警告 0 错误。
+- **双 TFM**：两测试项目 `net8.0;net10.0` 各跑全量（`-f net8.0` = 本地快速档）；两 TFM 共享同一 Results/golden 目录、逐字节/容差比对两边全绿；net10 零行为差异 ⇒ 未登记 DEFECT-011。附实测陷阱：`--filter` 下 NUnit3TestAdapter 4.4.2 会**执行** `[Explicit]` 豁免种子（全量运行才正确跳过）——§8.2 第 8 项「CI 不得筛选」的第二条独立佐证。
+- **覆盖率门禁**：`tests/coverage.runsettings`（cobertura、只插桩 `[OpenCSG.NET]*`）+ `tools/coverage-gate.py`（默认单命令：两套件 `-f net8.0` 采集 → 逐行 `max(hits)` 并集 → 阈值判定；fail-closed 退出码 0/1/2）。**SystemTests 采集排除 `[Category("Perf")]`**：插桩把墙钟预算用例拖慢 ≈35×（预算口径以未插桩为前提），时间把关属 nightly perf 门禁；Tests 工程不筛选。
+- **CI/nightly**：`ci.yml` 重写（slnx 全构建 + ubuntu/windows 双平台矩阵 + 不筛选测试 + 覆盖率门禁 + cobertura 工件上传）；`nightly.yml` 新建（cron 18:30 UTC + dispatch：Long 档 `OPENCSG_FUZZ_CASES=20000` 放大 + windows perf 门禁；独立于 ci.yml = 非阻塞 PR）。**边界**：GitHub Actions 本体不可本地运行——验证 = YAML 语法校验 + 每条 `run:` 命令行的本地等价执行（scratch 副本，含 CRLF golden 检出态）；**Long 档现状**：`Corpus.LongCaseCount()` 入口就绪且 env 覆盖经用例验证，但当前无用例循环消费 ⇒ nightly 该步现阶段 ≈ 全量 SystemTests 复跑（如实登记，消费方属后续计划）。
+- **ApiCompat**：五类命名缺口（`BoundingBox`/`BoundingSphere`/`PolygonShared`/`CsgEvaluationException`/`ViewVector`）补齐；`CsgSerialization` 的三个 `Utf8JsonReader` 辅助实为 internal `JsonReadHelpers`（netstandard2.0 侧实测 CS0122 不可引用）⇒ 按消费侧可钉的两层落地（公开入口输入形态 + 同契约等价转换器）。PublicApiAnalyzers 方案需动 `src/` ⇒ **未获批准**，登记为后续选项（且其盯可见 API 面，盖不住该 internal 缺口）。
+
+### 逐计划用例数终审（TRX 权威口径）
+
+**口径说明（一次）**：各计划段落自报数来自 `dotnet test` console——console 的「总计」**不含** `[Explicit]` 豁免（NotExecuted）用例；TRX 才是权威，但 TRX `<Counters notExecuted>` 属性实测**恒为 0**（VSTest 不把 Explicit 跳过计入该属性）⇒ NotExecuted 必须按逐条 `<UnitTestResult outcome="NotExecuted">` 统计。下表「终值」为 Plan F 终验 TRX，**Tests 与 SystemTests 在 net8.0 与 net10.0 上逐位相同**。
+
+| 计划段落（收口时点） | 段落自报（console 口径，当时） | 与终值的核对（TRX） |
+| --- | --- | --- |
+| 阶段 0 基线 | Tests 102/102 | 终值 Tests 353 total = 102 + 新增 251（其中执行 243 + Explicit 8） |
+| Plan A（阶段 0–1） | Tests 122/0（Task 3: 108、阶段 1: 115、Task 6: 122） | 122 = 102 + 20；段内局部换算「基线 110 + 新增 5」为过程值，段级锚点 122 闭合一致 |
+| Plan B1 | Tests 129/0（TRX total 130、NotExecuted×1）；SystemTests 1033/0/101（total 1134） | 129 + 173(C) + 40(D) + 3(F) = 345 ✓；1033 + 24(B2) + 36(D) + 16(E) = 1109 ✓ |
+| Plan B2 | SystemTests 1057/0/160（total 1217）；Tests 129 不变 | 1057 = 1033 + 24 执行新增；NotExecuted 101 + 59 = 160（DEFECT-005 语料豁免 59） |
+| Plan C | Tests 302/0/4（total 306）；SystemTests 1057/0/160 不变 | 302 = 129 + 173（新增 176 中 3 条 Explicit 不计执行）；SystemTests 不变 = A1/A2/A4 修复的回归安全网 |
+| Plan D | Tests 342/0（自注 7 Explicit）；SystemTests 1093/0/160（total 1253） | 1093 = 1057 + 36 ✓ |
+| Plan E | Tests 342/0/8（total 350）；SystemTests 1109/0/160（total 1269） | 1109 = 1093 + 16 ✓；Tests +1 Explicit（DEFECT-001 并行复现）⇒ 执行数不变 |
+| **Plan F 终值** | — | **Tests 345/0/8（total 353）；SystemTests 1109/0/160（total 1269）；两 TFM 逐位相同** |
+
+**勘误（一行，不回溯改写前文）**：Plan D/E 段落自报的「Tests 342」为当时口径；Plan F 的 Tessellation 回填（`TessellationArcSegmentsTest`——五组 ≥90% 阈值首次暴露的遗漏分支）新增 3 个执行用例 ⇒ 当前（终值）**Tests 345 通过**（另 8 个 Explicit，总计 353），SystemTests 用例面无变化（1109/160/1269）。
+
+### 覆盖率前后对照（实际数字；命令与 CI 逐字相同）
+
+| 口径 / 时点 | 数字 | 出处 |
+| --- | --- | --- |
+| 阶段 0（改动前） | src 行覆盖 **53.51%**、分支 **50.46%**；13 个模块里 12 个 0%（最高 Tessellation 26.31%） | 阶段 0 cobertura 实测 |
+| Plan C 收口（类计数加权） | 0% 类 7→**0**、类平均行覆盖 **98.5%**、完全未覆盖方法 82→**1**（死代码 `Solid.CombinedBounds`） | Plan C 收口实测 |
+| Plan F 终验（spec §8.1 判定口径 = 行计数加权并集） | src/ 整体 **98.43%**（2942/2989）；`View*` **98.25%**（896/912）；CsgHelpers / StlWriter / CsgMesh / Tessellation 全部 **100%**；阈值 85% / 90% 全 PASS | `python tools/coverage-gate.py`（Task 2 官方对照数字，终验逐位复现） |
+
+命令（脚本内部执行；Tests 不筛选、SystemTests 排除 Perf 类）：
+
+```text
+python tools/coverage-gate.py
+# → dotnet test tests/OpenCSG.NET.Tests       -c Release -f net8.0 --settings tests/coverage.runsettings --collect:"XPlat Code Coverage" --results-directory artifacts/coverage-gate/Tests
+# → dotnet test tests/OpenCSG.NET.SystemTests -c Release -f net8.0 --settings tests/coverage.runsettings --collect:"XPlat Code Coverage" --results-directory artifacts/coverage-gate/SystemTests --filter "TestCategory!=Perf"
+# → 解析两份 cobertura 的逐行并集 → 五组 + src overall 对照表 → 阈值判定（exit 0/1/2）
+```
+
+数字来自**本地运行**（SDK 10.0.4xx + coverlet.collector 6.0.4），命令与 CI 逐字相同；**CI 首跑数字以 artifacts 为准**（GitHub Actions 不可本地运行）。两口径不可直接相减：Plan C 的 98.5% 是类计数加权、门禁判定 98.43% 是行计数加权——逐行桥接与类级差异归因（Tessellation 68.42%→100.00%、ViewProjector/DepthRaster 95.20%→96.00%）见 task-2-report §4。
+
+### 终验（全量，实测输出）
+
+```text
+$ dotnet build OpenCSG.NET.slnx -c Release
+已成功生成。
+    0 个警告
+    0 个错误
+
+$ dotnet test tests/OpenCSG.NET.Tests -c Release --no-build
+已通过! - 失败:     0，通过:   345，已跳过:     0，总计:   345，持续时间: 1 s - OpenCSG.NET.Tests.dll (net8.0)
+已通过! - 失败:     0，通过:   345，已跳过:     0，总计:   345，持续时间: 1 s - OpenCSG.NET.Tests.dll (net10.0)
+（TRX 逐结果：Passed=345、NotExecuted×8；total=353；两 TFM 相同）
+
+$ dotnet test tests/OpenCSG.NET.SystemTests -c Release --no-build
+已通过! - 失败:     0，通过:  1109，已跳过:     0，总计:  1109 - OpenCSG.NET.SystemTests.dll (net8.0)
+已通过! - 失败:     0，通过:  1109，已跳过:     0，总计:  1109 - OpenCSG.NET.SystemTests.dll (net10.0)
+（TRX 逐结果：Passed=1109、NotExecuted×160；total=1269；两 TFM 相同）
+
+$ python tools/coverage-gate.py
+…（组表：View* 98.25% / 四组 100% / src overall 98.43%，阈值全 PASS）…
+GATE PASS (exit 0)
+
+$ dotnet run --project perf/OpenCSG.NET.PerfTest -c Release -- --gate perf/baseline.json
+门禁通过：无项 min 超出 25% 阈值。
+（exit 0；本轮实测命中「超阈自动重测」（WriteBinary）与「中位数超阈但 min 未超」噪声判定（Union、Evaluate）两条协议路径）
+
+$ dotnet run --project tools/OpenCSG.NET.CrossRuntime -c Release -f net8.0   # 与 -f net10.0 对照
+combined=sha256:97f2f11dd2490f183bb70a380c680d91a9a4f6061028b180910a088c0fddef75（两 TFM 一致）
+
+$ find tests/OpenCSG.NET.Tests/Results \( -name '*_.stl' -o -name '*_.json' \) | wc -l
+0
+（Results 常备资产：60 个 .stl + Views 下 15 个 .json；发布产物 0 残留）
+```
+
+`src/` 零改动（Plan F 仅测试侧/构建配置/工作流/文档）；缺陷册开放 10 条（001–010）+ 已修复 3 条（A1/A2/A4），双向索引由 `DefectRegistryTest` 强制。
+
+## 已知限制（收官定稿，六项）
+
+1. **`modreq` → 库内 `internal IsExternalInit` 的隐性运行时契约**。库为 netstandard2.0 目标的 `record`/`init` 携带 `src/OpenCSG.NET/CsgNode.cs` 中的 `internal IsExternalInit` polyfill；已编译消费方的 init setter MemberRef 带 `modreq(IsExternalInit)` 指向它（Plan A Task 6 ApiCompat 实测确认）。**改该声明前必读**：只要公共 API 仍含 `record`/`init` 就必须继续携带——移除后公共 API 面无变化，破坏只出现在已编译消费方的运行时。附带边界：消费方要在自己的编译单元内*声明* record/init 仍需自备 polyfill（CS0518，隔离复现证明与本库无关）；*消费*本库的 record/init 成员不需要。
+2. **DEFECT-001..010 登记摘要与「只报告」政策**。政策（spec §9）：默认只报告不改，例外仅 A1/A2/A4 三条最小修复（已入 `tests/DEFECTS.md`「已修复」表 + 回归用例 `A1SolidCacheTest`/`A2SectorAngleTest`/`A4StlHeaderTest`）。开放 10 条：001 `ViewArcFitter` 诊断静态非线程局部（低，并行串扰已实证）；002 空实体 `Subtract`/`Intersect` 语义错误（高）；003 Survey 档 `Union` 重合面重复/丢失（高）；004 球面轮廓整圆还原失败（中，成链取向 + 消隐碎段双机制）；005 深度栅格量化自遮挡误判（中，语料 59/64 种子受影响）；006 `Polygon` 缓存陈旧与别名（中）；007 `ToJson` 深树无写出侧深度守卫（不可捕获 StackOverflow，触发域窄）；008 `TabbedPlate` 浅斜角肩部欠覆盖（中）；009 `ViewProjection.Bounds` 忽略 `Arcs`（中）；010 薄板分解缝投影为凭空可见长实线（中）。全部带最小复现（seed + 一行命令）并以 `[Explicit]` 或常绿行为钉豁免，套件保持绿色；编号↔测试双向索引由 `DefectRegistryTest` 强制。
+3. **perf 门禁的机器噪声口径**。门禁判据 = 基线 min ×1.25（快操作 min<20ms 只报告）；超阈自动重测一次取更好 min；「中位数超阈但 min 未超」判为整轮机器状态被抬高的噪声。仅 nightly、非阻塞 PR；跨机器首跑差异按「机器指纹」对待：重跑确认 ⇒ 查负载 ⇒ 确认噪声则记录环境、不按回归；仅确认 runner 长期系统性偏移才 `--write-baseline` 重生成且**必须提交 diff**（禁止为让门禁变绿而重生成）。基线录制机为本机 `LK-PC` ⇒ 首轮 nightly 比值预计带上机器差。
+4. **并行/soak 结论**。并行档（`tests/ParallelRun.runsettings`，4 worker）为 **opt-in**，默认仍串行（B1 契约不破）。并行首跑即实证 DEFECT-001 串扰（Tests 341/342）⇒ 受影响夹具 `[NonParallelizable]`，并行 ×8（SystemTests）/×4（Tests）全绿、计数与串行一致。soak：SystemTests 累计 51 次连跑零 Failed（Plan E 25/25 全绿收口）；Plan C 记录的单次偶发失败此后未再复现——**残留不确定性**：无法证明其已被结构性消除，后续若再现请先开 TRX 捕获失败用例名。
+5. **跨运行时哈希一致结论及其边界**。net8.0 与 net10.0 对语料子集的求值/三视图/序列化/STL 的逐阶段与组合 SHA256 **完全一致**（`combined=97f2f11d…def75`；Plan E 两 TFM 各两次，Plan F 终验复现逐位相同）。边界：这是**同机同 OS** 的运行时版本对照，不构成跨 OS 保证——ubuntu/windows 矩阵首跑才首次验证跨平台一致性。
+6. **golden 的 `.gitattributes` 适用范围与换行敏感性**。现有规则仅一条：`Results/**/*.json text eol=lf`（JSON golden 以显式 `\n` 生成、`File.ReadAllBytes` 逐字节比对）。**STL 不在其内**：legacy 45 个 golden 的 `StlStringEquals` 按 `\r`/`\n` 双分隔解析（换行不敏感）；L4 新增的 15 个 byte-exact 模块基线经 `Solid.ToStlString` ⇒ 行尾随 `Environment.NewLine`（Windows CRLF / Linux LF）。**`core.autocrlf=false` 的 Windows 克隆**：检出 LF 基线 + 运行输出 CRLF ⇒ 字节比对失配（本地判别力实测：手动 LF 化一份基线即红）；常规检出（autocrlf=true）与 CI 两平台预期均绿。ubuntu/windows 矩阵**首跑须观察**——若某平台因换行机制转红，按 ci.yml 注释纪律先调查取证并登记（tests/DEFECTS.md），不得静默删除该平台。
+
+以上六项均为本地实测 + 仓库/代码实证的边界结论；GitHub Actions 本体（调度、矩阵、工件上传、setup-dotnet 多版本安装语义）无法本地运行——相关结论以首次实际 CI 运行记录为准。
