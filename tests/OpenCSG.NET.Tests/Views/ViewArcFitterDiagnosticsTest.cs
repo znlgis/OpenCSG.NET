@@ -53,6 +53,8 @@ namespace Csg.Test
             //   主线程（= 那个开诊断的用例）：开 DiagnosticsEnabled=true → Fit(8 段弧) → 读 LastDiagnostics；
             //   另一线程（= 任意并行投影用例）：什么都不开，仅因进程级静态读到 true → Fit(4 段矩形)
             //   ⇒ 覆写主线程的 LastDiagnostics。
+            // 失败路径硬化（审查 M1）：另一线程的异常存进 otherThreadError（不逃逸终止进程）；
+            // finally 仅在确实 Start 过时 Join（前置断言失败时 Join 未启动线程会抛 ThreadStateException 掩盖真因）。
             var ownSegments = ArcSegments(radius: 10, startDeg: 0, sweepDeg: 90, steps: 8);
             var otherSegments = RectSegments(width: 30, height: 10);
 
@@ -60,14 +62,23 @@ namespace Csg.Test
             var timeout = TimeSpan.FromSeconds(20);
             bool? otherThreadSawEnabled = null;
             var otherThreadDone = false;
+            Exception otherThreadError = null;
+            var otherStarted = false;
 
             var other = new Thread(() =>
             {
-                barrier.SignalAndWait(timeout);                 // 等主线程先写完自己的 LastDiagnostics
-                otherThreadSawEnabled = ViewArcFitter.DiagnosticsEnabled;
-                ViewArcFitter.Fit(otherSegments);               // 串扰写入：覆写 LastDiagnostics
-                otherThreadDone = true;
-                barrier.SignalAndWait(timeout);                 // 让主线程在其后读取
+                try
+                {
+                    barrier.SignalAndWait(timeout);                 // 等主线程先写完自己的 LastDiagnostics
+                    otherThreadSawEnabled = ViewArcFitter.DiagnosticsEnabled;
+                    ViewArcFitter.Fit(otherSegments);               // 串扰写入：覆写 LastDiagnostics
+                    otherThreadDone = true;
+                    barrier.SignalAndWait(timeout);                 // 让主线程在其后读取
+                }
+                catch (Exception ex)
+                {
+                    otherThreadError = ex;   // 线程体未处理异常会终止测试进程 —— 存储后由主线程断言呈现
+                }
             });
 
             try
@@ -78,10 +89,14 @@ namespace Csg.Test
                 Assert.That(ownDiagnostics, Does.Contain("输入 8 段"), "夹具前提：本线程的 Fit 应写下自己的链统计");
 
                 other.Start();
+                otherStarted = true;
                 barrier.SignalAndWait(timeout);                 // 放行另一线程
                 barrier.SignalAndWait(timeout);                 // 等另一线程写完
                 other.Join(timeout);
-                Assert.That(otherThreadDone, Is.True, "夹具前提：另一线程应完成（屏障/超时未卡死）");
+                Assert.That(otherThreadDone, Is.True,
+                    otherThreadError == null
+                        ? "夹具前提：另一线程应完成（屏障/超时未卡死）"
+                        : $"夹具前提：另一线程未完成（线程体异常已存储）：{otherThreadError}");
 
                 var afterCrosstalk = ViewArcFitter.LastDiagnostics;
 
@@ -101,7 +116,8 @@ namespace Csg.Test
             finally
             {
                 ViewArcFitter.DiagnosticsEnabled = false;
-                other.Join(timeout);   // 断言失败/超时时不遗留后台线程
+                if (otherStarted)
+                    other.Join(timeout);   // 断言失败/超时时不遗留后台线程（未 Start 则不得 Join）
             }
         }
 
