@@ -50,9 +50,11 @@ namespace Csg.Test
             AssertOnOutlineOnly(top, viewName: "俯视", outlineH: ThinPlateThicknessHalf);
 
             // ② 左视（沿板厚方向看）：凸台可见（足迹 ±50 的两条 100mm 线），但 Union 的分解缝
-            //    在 ±50 处留下**贯穿整板的 1000mm 线**（实测 2 条）—— 这是网格拓扑伪影（CSG 求值把
-            //    板的大面按凸台足迹切成多片、T 接缝在三角汤里成为单侧边 ⇒ 投影器按「边界边」放行），
-            //    与 DEFECT-004/005 的栅格量化无关，单独在此钉出，防被当成同族问题漏掉。
+            //    在 ±50 处留下**贯穿整板的 1000mm 可见幻线**（实测 2 条；每条约 450mm 落在凸台
+            //    足迹之外 —— 凭空墨线）—— 这是网格拓扑伪影（CSG 求值把板的大面按凸台足迹切成
+            //    多片、T 接缝在三角汤里成为单侧边 ⇒ 投影器按「边界边」放行、投影为可见实线），
+            //    与 DEFECT-004/005 的栅格量化无关，已登记为 **DEFECT-010**（只报告）；
+            //    此钉即其可执行读数，防被当成同族问题漏掉。
             //    实测：10 段（8V+2H），hiddenLen 198.790111。
             AssertViewPin(left, viewName: "左视", expectedVisible: 8, expectedHidden: 2, expectedHiddenLength: 198.7901);
 
@@ -91,11 +93,12 @@ namespace Csg.Test
             Assert.That(triangles.Count, Is.EqualTo(48), "三角化后 48 个三角形（钉值）");
 
             // ① 采样数分析（复刻口径见 CandidateSampleStats）：1e6 长棱在三个视图里的采样数
-            //    实测 901 / 234 / 901，**均低于 4000** —— MaxEdgeSamples 上限对闭合实体是不可达的
-            //    结构结论：候选边（轮廓/锐/边界）的端点必在「正面三角形」的屏面包络内
+            //    实测 901 / 234 / 901，**均低于 4000** —— MaxEdgeSamples 上限对**水密网格**是不可达的
+            //    结构结论：候选边（轮廓/锐）的端点必在「正面三角形」的屏面包络内
             //    （轮廓边必属一个正面三角形、锐边两侧都正面），故采样数 ≤ √2 × 900 ≈ 1273；
             //    1e6 长棱之所以只采 901 个点，是因为栅格单元 cell = 屏面最大跨度/900 与棱长同步放大。
-            //    4000 上限只在「开放网格的边界边投影远大于正面包络」时才咬合（本例不触发）。
+            //    4000 上限只在含**边界边**的网格（开放/丢面/DEFECT-003 类丢面输出）咬合：边界边可属
+            //    背面三角形、投影超出正面包络（本例的圆柱是水密网格，不触发）。
             AssertSamplePin(triangles, ViewDirections.Front, viewName: "主视", expectedCandidates: 19, expectedMaxSamples: 901);
             AssertSamplePin(triangles, ViewDirections.Top, viewName: "俯视", expectedCandidates: 12, expectedMaxSamples: 234);
             AssertSamplePin(triangles, ViewDirections.Left, viewName: "左视", expectedCandidates: 19, expectedMaxSamples: 901);
@@ -192,8 +195,9 @@ namespace Csg.Test
         /// 复刻 <see cref="ViewProjector"/> 的**候选边筛选 + 采样数**口径（只用公开 API：
         /// <see cref="ViewMeshTopology"/> 的边/法向 + <see cref="ViewProjector.RasterResolution"/> /
         /// <see cref="ViewProjector.MaxEdgeSamples"/>）；<c>DepthRaster.Build</c> 是私有实现，无法直接调用。
-        /// 复刻给边界用例提供「1e6 长棱被采多少个点」的可断言读数；若实现口径变化，本复刻与投影器
-        /// 一起漂移会立刻失败（钉的价值所在）。
+        /// 本复刻是当前口径的**快照**（静态拷贝，不随 ViewProjector 的改动自动跟随）：实现口径若变化，
+        /// 须重新 diff 本复刻与实现并重钉；钉住的候选数/采样数（901/234/901 等）与投影器输出的行为钉
+        /// （段数/弧数/不挂起）**部分补偿**了复刻与实现之间的漂移。
         /// </summary>
         static (int Candidates, int MaxSamples) CandidateSampleStats(
             IReadOnlyList<ViewTriangle> triangles, ViewDirection view)

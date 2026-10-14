@@ -6,7 +6,8 @@
     <Nullable>enable</Nullable>
     <!-- 刻意**保持**默认分层编译 + 动态 PGO（不关）：生产里库就是在该配置下跑，实测关闭后
          动态 PGO 一并失效、Clean 20k 的中位数从 ~605ms 涨到 ~1830ms（PGO 对热循环 3× 量级），
-         基线就失真了。抖动改由预热 3 轮 + 取中位数压（见 PerfSuite.Measure）。 -->
+         基线就失真了。抖动改由预热 3 轮 + 每项多采样取 **min** 压（门禁统计量 = min，
+         中位数仅人读，见 PerfSuite.Measure / RunGate）。 -->
   </PropertyGroup>
 
   <ItemGroup>

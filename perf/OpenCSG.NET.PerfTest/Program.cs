@@ -36,9 +36,13 @@ namespace Csg.PerfTest
                 switch (args[i])
                 {
                     case "--suite":
+                        if (mode != null)
+                            return RejectSecondMode(mode, args[i]);
                         mode = "suite";
                         break;
                     case "--write-baseline":
+                        if (mode != null)
+                            return RejectSecondMode(mode, args[i]);
                         mode = "write-baseline";
                         if (i + 1 >= args.Length)
                         {
@@ -48,6 +52,8 @@ namespace Csg.PerfTest
                         positional.Add(args[++i]);
                         break;
                     case "--gate":
+                        if (mode != null)
+                            return RejectSecondMode(mode, args[i]);
                         mode = "gate";
                         if (i + 1 >= args.Length)
                         {
@@ -57,6 +63,8 @@ namespace Csg.PerfTest
                         positional.Add(args[++i]);
                         break;
                     case "--complexity":
+                        if (mode != null)
+                            return RejectSecondMode(mode, args[i]);
                         mode = "complexity";
                         break;
                     case "--repeats":
@@ -104,13 +112,22 @@ namespace Csg.PerfTest
             }
         }
 
+        /// <summary>模式互斥：--suite / --write-baseline / --gate / --complexity 只能选一（重复出现同样拒绝）。</summary>
+        static int RejectSecondMode(string first, string second)
+        {
+            Console.Error.WriteLine($"参数错误：模式互斥 —— 已指定 --{first}，又见 {second}；一次只能运行一个模式。");
+            PrintHelp();
+            return 2;
+        }
+
         static void PrintHelp()
         {
             Console.WriteLine("OpenCSG.NET Plan E 性能工具");
             Console.WriteLine("  --suite                        跑停表套件并打印中位数表");
             Console.WriteLine("  --write-baseline <path>        跑套件并写出基线 JSON（提交件 perf/baseline.json）");
             Console.WriteLine("  --gate <baseline.json>         与基线逐项比较，任一项 new.min > old.min×1.25 ⇒ exit 1");
-            Console.WriteLine("                                 （中位数一并记录；中位超阈而 min 未超判为机器状态噪声）");
+            Console.WriteLine("                                 （超阈项自动重测一次取更小 min；基线 min < 20ms 的信息项只报告；");
+            Console.WriteLine("                                  中位超阈而 min 未超判为机器状态噪声）");
             Console.WriteLine("  --complexity                   Clean 5k/20k、Project 5k/20k 预算 + 比值守卫");
             Console.WriteLine("  --repeats <n>                  每项重复次数（--suite 默认 5；--gate/--write-baseline 默认 15）");
             Console.WriteLine("  （无参数）                     BenchmarkDotNet 全量运行（人工深挖，分钟级）");
