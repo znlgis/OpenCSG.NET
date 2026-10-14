@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  OpenCSG.NET 覆盖率采集配置（Plan F / Task 2；CI 与本地共用同一份，保证口径一致）。
+
+  用法示例与 CI 门禁命令见 tools/coverage-gate.py 文件头部（默认模式即自动带上本文件；
+  采集结果落在 artifacts/coverage-gate/<套件>/）。
+
+  配置说明（刻意保持最小口径，与 Plan C 收口所用的 coverlet 默认行集合一致）：
+  - Format=cobertura：门禁脚本只解析 cobertura XML；钉死后每次运行只产出
+    coverage.cobertura.xml 一个文件（默认即 cobertura，此处显式化避免版本漂移）。
+  - Include=[OpenCSG.NET]*：只对产品程序集（模块名恰好为 "OpenCSG.NET"，
+    程序集名部分无通配符 ⇒ 精确匹配，不会误含 OpenCSG.NET.TestKit/.Tests/.SystemTests）
+    做插桩，报告即门禁域；门禁本身仍以 filename 落在 src/OpenCSG.NET/ 下为准（双保险）。
+  - IncludeTestAssembly=false：显式登记默认值，测试程序集不参与覆盖率。
+  - 不设 ExcludeByAttribute：coverlet 默认**不过滤**任何属性，行集合 = Plan C 口径
+    （含 record 合成成员等在声明行上的序列点）。实测若显式列出
+    GeneratedCodeAttribute/CompilerGeneratedAttribute，会静默丢掉全部记录类型
+    （record）的合成成员行：src 总行数 2989 → 2842（-147 行、-21 类），两种口径
+    切换属约定变更而非采集差异，故本文件固定为「不过滤」。
+  - 不设 SkipAutoProps 等其它开关：同上，避免与 Plan C 对照口径漂移。
+  - 注意：覆盖率运行不用 tests/ParallelRun.runsettings（NUnit 4 workers）——
+    门禁要求确定性采集，维持测试平台默认的串行口径。
+-->
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat code coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <Include>[OpenCSG.NET]*</Include>
+          <IncludeTestAssembly>false</IncludeTestAssembly>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>
