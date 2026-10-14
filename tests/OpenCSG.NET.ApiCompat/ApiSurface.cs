@@ -2,8 +2,12 @@
 // 从 netstandard2.0 侧校验库的公共 API 面。任何 API 不再可用 ⇒ 本工程编译失败。
 // 所有返回值都用弃元 `_` 消费：本工程开了 TreatWarningsAsErrors，
 // 命名局部变量"已赋值未使用"会触发 CS0219 而变成错误。
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Csg;
 
 namespace OpenCSG.NET.ApiCompat
@@ -228,6 +232,165 @@ namespace OpenCSG.NET.ApiCompat
             var resizedProfile = Profiles.Rectangle(1, 1) with { Width = 2 };
 
             _ = resizedViaWith.Size.X + rebuiltViaInitializer.Size.X + resizedProfile.Width;
+        }
+
+        // 包围盒/包围球（Plan F / Task 4 补缺：spec §13 点名，此前从未按名引用）：
+        // BoundingBox 的两个构造器、Min/Max/Size/Center、operator+、Intersects 与
+        // BoundingSphere 的「默认构造 + 对象初始化器」全部从 netstandard2.0 侧钉住。
+        internal static void TouchBoundingVolumes()
+        {
+            var solid = Solids.Cube(new Vector3D(4, 6, 8), center: true);
+            var fromVertices = solid.Polygons[0].BoundingBox;
+            var fromVerticesSphere = solid.Polygons[0].BoundingSphere;
+
+            var byExtents = new BoundingBox(2, 4, 6);
+            var shifted = byExtents + new Vector3D(1, 1, 1);
+            var overlaps = shifted.Intersects(fromVertices);
+            var explicitSphere = new BoundingSphere { Center = new Vector3D(0, 0, 0), Radius = 2 };
+
+            _ = fromVertices.Min.X + fromVertices.Max.Y + fromVertices.Size.Z + fromVertices.Center.X;
+            _ = shifted.Max.Z + byExtents.Min.Z + fromVertices.ToString().Length;
+            _ = overlaps;
+            _ = fromVerticesSphere.Center.X + fromVerticesSphere.Radius
+                + explicitSphere.Center.Y + explicitSphere.Radius;
+        }
+
+        // PolygonShared 与 CsgEvaluationException（Plan F / Task 4 补缺：spec §13 点名）：
+        // 前者钉住构造器 + Tag/Hash 读数 + 经 Polygon.Shared 往返；后者钉住两构造器
+        // 与 catch 形态（Evaluate 的运行期空值守卫抛该异常）。
+        internal static void TouchPolygonSharedAndEvaluationFailures()
+        {
+            var shared = new PolygonShared(null);
+            var polygon = new Polygon(
+                new List<Vertex>
+                {
+                    new Vertex(new Vector3D(0, 0, 0), new Vector2D(0, 0)),
+                    new Vertex(new Vector3D(1, 0, 0), new Vector2D(1, 0)),
+                    new Vertex(new Vector3D(0, 1, 0), new Vector2D(0, 1)),
+                },
+                shared);
+            var reconstructed = new Polygon(polygon.Vertices, polygon.Shared, polygon.Plane);
+            _ = shared.Tag + shared.Hash.Length + reconstructed.Shared.Tag;
+
+            CsgEvaluationException? caught = null;
+            try
+            {
+                CsgEvaluator.Evaluate(null!);
+            }
+            catch (CsgEvaluationException ex)
+            {
+                caught = ex;
+            }
+
+            var wrapped = new CsgEvaluationException("api-compat", new InvalidOperationException("api-compat"));
+            var single = new CsgEvaluationException("api-compat");
+            _ = (caught?.Message.Length ?? 0) + wrapped.Message.Length
+                + (wrapped.InnerException?.Message.Length ?? 0) + single.Message.Length;
+        }
+
+        // ViewVector（Plan F / Task 4 补缺：spec §13 点名，此前只经 ViewDirections/ViewTriangle
+        // 间接出现）：按名引用构造器、X/Y/Z、Length、两个 Cross、Dot、Normalized、operator*、
+        // ToString，并经公开读数（ViewTriangle.Normal、ViewMeshTopology.Normals）走一遍。
+        internal static void TouchViewVectorSurface()
+        {
+            var front = ViewDirections.Front;
+            var look = front.Look;
+            var toCamera = ViewVector.Cross(front.Right, front.Up);
+            var edgeCross = ViewVector.Cross(new ViewPoint(0, 0, 0), new ViewPoint(1, 0, 0));
+            var normalized = toCamera.Normalized();
+            var scaled = new ViewVector(0, 0, 1) * 2.0;
+            var dot = look.Dot(normalized);
+
+            var triangle = new ViewTriangle(
+                new ViewPoint(0, 0, 0), new ViewPoint(1, 0, 0), new ViewPoint(0, 1, 0));
+            var topology = new ViewMeshTopology(new List<ViewTriangle> { triangle });
+
+            _ = look.X + look.Y + look.Z + look.Length;
+            _ = edgeCross.Z + normalized.X + scaled.Y + dot;
+            _ = triangle.Normal.Z + topology.Normals.Count + toCamera.ToString().Length;
+        }
+
+        // CsgSerialization 的三个读取期辅助 RequireObject/NameEquals/ReadNumber（位于同文件的
+        // internal 类型 JsonReadHelpers）在 netstandard2.0 消费侧**不可见**——实测 CS0122
+        // 「JsonReadHelpers 不可访问，因为它具有一定的保护级别」（src/ 未授予 IVT 且冻结；
+        // 即便上 Microsoft.CodeAnalysis.PublicApiAnalyzers，PublicAPI.Shipped.txt 也只覆盖
+        // 可见 API 面，同样盖不住它们）。故本探针按能钉的两层钉：
+        //   ① 公开入口 FromJson/FromJsonArray 的输入形态——含 "$type" 判别的对象、PascalCase
+        //      分量名（NameEquals 的命中路径）、数值分量（ReadNumber 的读取路径）；
+        //   ② 消费侧用库传递的同一 System.Text.Json（8.0.6）自行实现等价校验惯例
+        //      （token 类型检查 + 忽略大小写名称比较 + GetDouble），同时钉住
+        //      Utf8JsonReader/Utf8JsonWriter/JsonConverter 对 netstandard2.0 消费方可用——
+        //      若库将来把 System.Text.Json 改为不可传递（PrivateAssets）或不可消费版本，
+        //      本工程立即编译失败。三个辅助的运行期行为由 tests/OpenCSG.NET.Tests 的
+        //      CsgSerializationTest（大小写、非对象/非数值 token 抛错路径）覆盖。
+        internal static void TouchSerializationReaderSurface()
+        {
+            var pascalCase = CsgSerialization.FromJson(
+                "{\"$type\":\"Box\",\"Center\":{\"X\":1,\"Y\":2,\"Z\":3},\"Size\":{\"x\":1,\"y\":1,\"z\":1}}");
+            var fromArray = CsgSerialization.FromJsonArray(
+                "[{\"$type\":\"Sphere\",\"Center\":{\"x\":0,\"y\":0,\"z\":0},\"Radius\":1}]");
+
+            var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+            options.Converters.Add(new ConsumerVector3DConverter());
+
+            var json = JsonSerializer.Serialize(new Vector3D(1, 2, 3), options);
+            var roundTripped = JsonSerializer.Deserialize<Vector3D>(json, options);
+
+            var utf8 = Encoding.UTF8.GetBytes(json);
+            var reader = new Utf8JsonReader(utf8, isFinalBlock: true, state: default);
+            var isObject = reader.Read() && reader.TokenType == JsonTokenType.StartObject;
+
+            using var stream = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(stream))
+            {
+                writer.WriteStartObject();
+                writer.WriteNumber("x", roundTripped.X);
+                writer.WriteEndObject();
+            }
+
+            _ = pascalCase.GetType().Name.Length + fromArray.Count;
+            _ = roundTripped.Y + (isObject ? 1.0 : 0.0) + stream.Length;
+        }
+
+        /// <summary>
+        /// 消费侧自建转换器：镜像库内 JsonReadHelpers 三辅助的校验惯例
+        /// （RequireObject → token 必须为对象起始；NameEquals → 名称忽略大小写；
+        /// ReadNumber → token 必须为数值）。「netstandard2.0 消费方能写这类转换器」
+        /// 本身就是被钉住的契约。
+        /// </summary>
+        private sealed class ConsumerVector3DConverter : JsonConverter<Vector3D>
+        {
+            public override Vector3D Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+                if (reader.TokenType != JsonTokenType.StartObject)
+                    throw new JsonException("Vector3D must be a JSON object");
+
+                double x = 0, y = 0, z = 0;
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                {
+                    if (reader.TokenType != JsonTokenType.PropertyName)
+                        continue;
+                    var name = reader.GetString();
+                    reader.Read();
+                    if (reader.TokenType != JsonTokenType.Number)
+                        throw new JsonException($"Property '{name}' must be a JSON number");
+                    var value = reader.GetDouble();
+                    if (string.Equals(name, "x", StringComparison.OrdinalIgnoreCase)) x = value;
+                    else if (string.Equals(name, "y", StringComparison.OrdinalIgnoreCase)) y = value;
+                    else if (string.Equals(name, "z", StringComparison.OrdinalIgnoreCase)) z = value;
+                }
+
+                return new Vector3D(x, y, z);
+            }
+
+            public override void Write(Utf8JsonWriter writer, Vector3D value, JsonSerializerOptions options)
+            {
+                writer.WriteStartObject();
+                writer.WriteNumber("x", value.X);
+                writer.WriteNumber("y", value.Y);
+                writer.WriteNumber("z", value.Z);
+                writer.WriteEndObject();
+            }
         }
     }
 }
