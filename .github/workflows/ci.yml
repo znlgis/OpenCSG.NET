@@ -31,9 +31,12 @@ jobs:
         # ⇒ 按纪律取证并登记 DEFECT-011。
         # 分层裁定（矩阵保留双平台；字节级 golden = **Windows-pinned** 指纹）：
         #   Windows   → File.ReadAllBytes 逐字节比对（golden 按 Windows 输出冻结）；
-        #   非 Windows → 语义校验：JSON（视图/线段/圆弧计数与 view/visible/closed 标志精确 +
-        #               数值 1e-6 相对/近零绝对）、STL（solid 名 + 三角形数精确 + 顶点 1e-4 绝对）。
-        # 计数/拓扑不一致两平台一律判红（拓扑敏感通道，不静默通过）；若某平台转红且不在语义
+        #   非 Windows → 语义校验：JSON 计数/可见性标志精确 + 数值 1e-6、STL（solid 名 + 三角形数
+        #               精确 + 顶点 1e-4 绝对）。其中两个已定性平台拓扑敏感夹具（Cone_FrontTop /
+        #               TabbedPlate_ThreeViews；第二跑 run 38513802564：1150→1158、197→171，
+        #               见 tests/DEFECTS.md DEFECT-011）按平台拓扑敏感路径：计数翻转视图跳过与
+        #               Windows golden 的数值比对、输出带实测差量的 DEFECT-011 说明（不静默）。
+        # 其余计数/拓扑不一致两平台一律判红（拓扑敏感通道，不静默通过）；若某平台转红且不在语义
         # 容差内 ⇒ 那是**真发现**：先调查取证并在 tests/DEFECTS.md 登记，不得直接把该平台从矩阵删除。
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}

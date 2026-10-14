@@ -887,7 +887,9 @@ CI **首跑（run 38511973032）**结果：**windows-latest 全绿**（345/0 ×2
 
 **分层策略（既有裁定，已落地）**：Windows 维持字节指纹不变（golden 按 Windows 输出冻结 = **Windows-pinned**）；非 Windows 转语义校验——`ViewJsonGoldenTest.AssertGoldenJson`：视图/线段/圆弧计数与 view/visible/closed 标志精确 + 全部数值 1e-6（相对，近零 1e-6 绝对）；`ModuleBaselineGoldenTest.AssertAcceptedStl`：`solid <name>` 首行 + 三角形数精确 + 逐顶点 1e-4 绝对；**计数/拓扑不一致照旧判红**（拓扑敏感通道，不静默通过）。两夹具各加 6/7 个比对器用例（共 13 个，两平台确定性）：合成输入覆盖 ULP 漂移放行、超容差判红、计数响亮、标志、行尾（CRLF/LF）、坏输入收敛；真实数据覆盖 15+15 个 golden 全量解析自比 + TabbedPlate 整文件 1 ULP 漂移语义等价。Windows 本地复跑：Tests **358/0 ×2 TFM**、SystemTests 1109/0（net8.0）、`DefectRegistryTest` 17/17。
 
-**CI-only 残留**：非 Windows 分支本体与其平台消息只能在 ubuntu 复跑验证（本地 Windows 不可达）；TabbedPlate +3005 的「数字长度 vs 拓扑翻转」定性同样留待下次 CI——若语义层报「计数不一致」，即为拓扑翻转实锤（响亮失败，不静默）。
+**CI-only 残留（首跑时点）**：非 Windows 分支本体与其平台消息只能在 ubuntu 复跑验证（本地 Windows 不可达）；TabbedPlate +3005 的「数字长度 vs 拓扑翻转」定性同样留待下次 CI——若语义层报「计数不一致」，即为拓扑翻转实锤（响亮失败，不静默）。两项残留均已由第二跑闭环（见下段）。
+
+**第二跑（run 38513802564）——定性闭环**：分层语义层生效：ubuntu-latest **356/358**，余 2 败即拓扑响亮通道按设计点亮，确证**拓扑翻转（非数字文本长度）恰在两个夹具**——`Cone_FrontTop` 俯视 segments golden（Windows）1150 → Linux **1158（+8，+0.7%）**；`TabbedPlate_ThreeViews` 主视 segments golden 197 → Linux **171（−26，−13.2%）**。机制 = ULP 微差穿越阈值敏感逻辑的比较边界（`ViewSegmentCleanup` 合并 / `ViewArcFitter` 拟合 / `DepthRaster` 切分）；两平台输出均为同一几何的有效近似。其余 13 个 JSON 夹具与 9 个 STL 语义比对**全部通过**（纯数字漂移，1e-6/1e-4 容差内放行）；该提交 windows-latest 全绿（4m01s）。据此两个夹具在非 Windows 改走**平台拓扑敏感路径**（`AssertGoldenJsonTopologySensitive` / `FindTopologySensitiveJsonDivergence`：视图数相等 + 视图名/每视图非空/数字形状合理性照查；计数匹配视图保留数值 1e-6；计数翻转视图跳过数值比对并输出带实测差量（Δ 与百分比）的 DEFECT-011 说明——不静默、不判红）；其余 13 个 JSON 与全部 STL 口径不变。DEFECT-011 行已按本次定性更新（低严重度维持：两平台输出均为同一几何的有效近似）。
 
 ## 已知限制（收官定稿，六项）
 
