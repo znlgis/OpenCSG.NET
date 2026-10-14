@@ -16,6 +16,11 @@ namespace Csg.Test
     /// </summary>
     [TestFixture]
     [Category("Perf")]
+    // [NonParallelizable]（Plan E / Task 2 归因）：本组断言含**墙钟预算**（实测 ×5），而预算口径
+    // （BudgetClock 的 min）以「单实例机器的能力下界」为前提；进程内 4 worker 并行整套件时其他
+    // worker 同时跑重活，min 被争抢抬高——实测（2026-10-14，4 worker runsettings）Clean n=5000
+    // 的 min 33.0ms → 287.9ms（×8.7），超预算 ×1.74 判失败。这是测量环境属性（非产品缺陷）；
+    // Perf 用例改走 NUnit 非并行队列（仍逐条执行、计数不变），行为钉/预算其余口径不变。
     public class BoundaryProjectionTest
     {
         // ── 用例 1：薄板 + 0.01mm 凸台 ───────────────────────────────────────

@@ -16,6 +16,7 @@
     <Project Path="tests/OpenCSG.NET.Tests/OpenCSG.NET.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
+    <Project Path="tools/OpenCSG.NET.CrossRuntime/OpenCSG.NET.CrossRuntime.csproj" />
     <Project Path="tools/OpenCSG.NET.DataGen/OpenCSG.NET.DataGen.csproj" />
   </Folder>
 </Solution>

@@ -185,6 +185,12 @@ namespace Csg.Test
         // —— 链诊断（DiagnosticsEnabled 分支；DEFECT-001 已知其为进程级静态，本用例自持自清）——
 
         [Test]
+        [NonParallelizable]
+        // [NonParallelizable] 归因 DEFECT-001（不是用例自身的毛病）：DiagnosticsEnabled/LastDiagnostics
+        // 是进程级静态，并行整套件下本用例「Fit 返回 → 读 LastDiagnostics」的窗口会被其他 worker 的
+        // Fit 覆写。实测证据（2026-10-14，4 worker runsettings 第 2 次跑）：本用例失败，读到的
+        // LastDiagnostics 是另一 worker 的「输入 4 段…首(-15.00,-5.00) 末(15.00,5.00)」（矩形视图），
+        // 而本用例的输入是 8 段 90° 弧。修复（诊断态线程局部化）前本用例只能在非并行队列里跑。
         public void Diagnostics_Enabled_RecordsChainSummary()
         {
             ViewCurves<ViewSegment> curves;

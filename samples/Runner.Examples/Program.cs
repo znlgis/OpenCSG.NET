@@ -155,8 +155,17 @@ using (var sw = new StreamWriter(fs))
 }
 
 // Open the file in the default STL viewer (e.g. "3D Viewer" on Windows)
-System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo()
+// 环境守卫（Plan E / Task 2.7，与 Runner.CPurlin 同款）：默认不打开查看器（CI/无头环境不弹窗），
+// 仅当显式设置 OPENCSG_OPEN_VIEWER=1 时才用系统默认程序打开文本 STL。
+if (Environment.GetEnvironmentVariable("OPENCSG_OPEN_VIEWER") == "1")
 {
-    FileName = $"CsgExamples.stl",
-    UseShellExecute = true
-});
+    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo()
+    {
+        FileName = $"CsgExamples.stl",
+        UseShellExecute = true
+    });
+}
+else
+{
+    Console.WriteLine("已生成 cube.stl / wiki.stl / CsgExamples.stl；设置 OPENCSG_OPEN_VIEWER=1 可打开查看器。");
+}
