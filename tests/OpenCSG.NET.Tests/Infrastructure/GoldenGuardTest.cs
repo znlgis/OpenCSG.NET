@@ -31,7 +31,7 @@ namespace Csg.Test
             var asmPath = Assembly.GetExecutingAssembly().Location;
             var repoPath = Path.GetDirectoryName(Path.GetDirectoryName(
                 Path.GetDirectoryName(Path.GetDirectoryName(asmPath))));
-            var solidTestPath = Path.Combine(repoPath, "Results");
+            var solidTestPath = Path.Combine(repoPath!, "Results");
 
             var guardPath = GoldenPaths.ResultsDirectory(asmPath);
 
@@ -41,7 +41,7 @@ namespace Csg.Test
         [Test]
         public void FindPendingGoldens_DetectsRejectedFile()
         {
-            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location);
+            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location)!;
             var probe = Path.Combine(results, "__GoldenGuardProbe___.stl");
             File.WriteAllText(probe, "solid probe\nendsolid probe\n");
 
@@ -60,7 +60,7 @@ namespace Csg.Test
         [Test]
         public void FindPendingGoldens_IgnoresAcceptedFiles()
         {
-            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location);
+            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location)!;
             // 注意：文件名末尾不能是 "_"。以 "_.stl" 结尾是残留判定，而 "__GoldenGuardProbe__.stl"
             // 的末五位恰好就是 "_.stl"，会被判成残留，故此处的已接受探针不带尾部下划线。
             var probe = Path.Combine(results, "__GoldenGuardProbe.stl");
@@ -81,7 +81,7 @@ namespace Csg.Test
         [Test]
         public void FindPendingGoldens_DetectsRejectedJsonFile()
         {
-            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location);
+            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location)!;
             var probe = Path.Combine(results, "__GoldenGuardProbe___.json");
             File.WriteAllText(probe, "{\"probe\":true}\n");
 
@@ -100,7 +100,7 @@ namespace Csg.Test
         [Test]
         public void FindPendingGoldens_IgnoresAcceptedJsonFile()
         {
-            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location);
+            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location)!;
             // 与 .stl 同理：已接受的 JSON 探针不以 "_" 结尾，不能被误判为残留。
             var probe = Path.Combine(results, "__GoldenGuardProbe.json");
             File.WriteAllText(probe, "{\"probe\":true}\n");
@@ -120,7 +120,7 @@ namespace Csg.Test
         [Test]
         public void FindPendingGoldens_DetectsRejectedFileInSubdirectory()
         {
-            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location);
+            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location)!;
             // Tier 4 的 JSON golden 位于 Results/Views/；门禁必须递归发现子目录残留，
             // 否则这些 golden 无人看守、无法升级。
             var views = Path.Combine(results, "Views");
@@ -147,7 +147,7 @@ namespace Csg.Test
         [Test]
         public void FindPendingGoldens_IgnoresAcceptedFileInSubdirectory()
         {
-            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location);
+            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location)!;
             var views = Path.Combine(results, "Views");
             var createdDir = !Directory.Exists(views);
             Directory.CreateDirectory(views);
@@ -172,7 +172,7 @@ namespace Csg.Test
         [Test]
         public void FindPendingGoldens_DetectsMixedRejectedFiles()
         {
-            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location);
+            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location)!;
             var stlProbe = Path.Combine(results, "__GoldenGuardMixedProbe___.stl");
             var jsonProbe = Path.Combine(results, "__GoldenGuardMixedProbe___.json");
             File.WriteAllText(stlProbe, "solid probe\nendsolid probe\n");
@@ -195,7 +195,7 @@ namespace Csg.Test
         [Test]
         public void FindPendingGoldens_OnCleanTree_IsEmpty()
         {
-            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location);
+            var results = GoldenPaths.ResultsDirectory(Assembly.GetExecutingAssembly().Location)!;
 
             var pending = GoldenGuard.FindPendingGoldens(results);
 

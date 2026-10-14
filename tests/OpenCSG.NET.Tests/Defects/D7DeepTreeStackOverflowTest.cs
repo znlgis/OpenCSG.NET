@@ -48,7 +48,7 @@ namespace Csg.Test
         [Explicit("DEFECT-007: 深树 ToJson 无写出侧深度守卫——默认栈 ≳1020 层进程中止（StackOverflow 不可捕获）；本用例在显式 8 MB 栈线程上断言 2000 层树的最深可捕获侧")]
         public void ToJson_DeepTree_WithAdequateStack_ThrowsCatchableJsonException()
         {
-            Exception caught = null;
+            Exception caught = null!;
             var thread = new Thread(() =>
             {
                 try
@@ -68,12 +68,12 @@ namespace Csg.Test
                 "8 MB 栈下 2000 层树应完成下钻并抛守卫异常；为 null 说明行为已漂移（预期仍抛 JsonException）");
             Assert.That(caught, Is.TypeOf<JsonException>(),
                 "应为可捕获的 JsonException（64 层 writer 深度上限），而非进程中止或其他异常类型");
-            Assert.That(caught.Message, Does.Contain("serialized").Or.Contain("depth"),
+            Assert.That(caught!.Message, Does.Contain("serialized").Or.Contain("depth"),
                 "外层消息应点明序列化失败（与 SerializationContractTest 的既有断言同口径）");
 
             var inner = caught.InnerException;
             Assert.That(inner, Is.Not.Null, "异常链应携带内层守卫信息（DEFECT-007 归因依据）");
-            Assert.That(inner.Message, Does.Contain("64"),
+            Assert.That(inner!.Message, Does.Contain("64"),
                 "内层消息应点明 64 层深度上限（CurrentDepth (64) … maximum allowed depth of 64）");
         }
 

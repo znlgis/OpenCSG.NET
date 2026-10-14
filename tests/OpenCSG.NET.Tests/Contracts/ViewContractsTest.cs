@@ -29,7 +29,7 @@ namespace Csg.Test
             foreach (var index in new[] { 3, -1, int.MaxValue })
             {
                 var ex = Assert.Throws<ArgumentOutOfRangeException>(() => { var _ = triangle[index]; });
-                Assert.That(ex.ParamName, Is.EqualTo("index"), $"索引 {index} 应报 ArgumentOutOfRangeException");
+                Assert.That(ex!.ParamName, Is.EqualTo("index"), $"索引 {index} 应报 ArgumentOutOfRangeException");
             }
         }
 
@@ -70,40 +70,40 @@ namespace Csg.Test
         [Test]
         public void CsgMesh_TrianglesOf_NullSolid_Throws()
         {
-            var ex = Assert.Throws<ArgumentNullException>(() => CsgMesh.TrianglesOf((Solid)null));
-            Assert.That(ex.ParamName, Is.EqualTo("solid"));
+            var ex = Assert.Throws<ArgumentNullException>(() => CsgMesh.TrianglesOf((Solid)null!));
+            Assert.That(ex!.ParamName, Is.EqualTo("solid"));
         }
 
         [Test]
         public void ViewMeshTopology_NullTriangles_Throws()
         {
-            var ex = Assert.Throws<ArgumentNullException>(() => new ViewMeshTopology(null));
-            Assert.That(ex.ParamName, Is.EqualTo("triangles"));
+            var ex = Assert.Throws<ArgumentNullException>(() => new ViewMeshTopology(null!));
+            Assert.That(ex!.ParamName, Is.EqualTo("triangles"));
         }
 
         [Test]
         public void ViewProjector_ProjectView_NullDirection_Throws()
         {
             var projector = new ViewProjector(Array.Empty<ViewTriangle>());
-            var ex = Assert.Throws<ArgumentNullException>(() => projector.ProjectView(null));
-            Assert.That(ex.ParamName, Is.EqualTo("view"));
+            var ex = Assert.Throws<ArgumentNullException>(() => projector.ProjectView(null!));
+            Assert.That(ex!.ParamName, Is.EqualTo("view"));
         }
 
         [Test]
         public void ViewArcFitter_NullInputs_Throw()
         {
-            var fit = Assert.Throws<ArgumentNullException>(() => ViewArcFitter.Fit<ViewSegment>(null));
-            Assert.That(fit.ParamName, Is.EqualTo("segments"));
+            var fit = Assert.Throws<ArgumentNullException>(() => ViewArcFitter.Fit<ViewSegment>(null!));
+            Assert.That(fit!.ParamName, Is.EqualTo("segments"));
 
-            var merge = Assert.Throws<ArgumentNullException>(() => ViewArcFitter.MergeConcyclic(null));
-            Assert.That(merge.ParamName, Is.EqualTo("arcs"));
+            var merge = Assert.Throws<ArgumentNullException>(() => ViewArcFitter.MergeConcyclic(null!));
+            Assert.That(merge!.ParamName, Is.EqualTo("arcs"));
         }
 
         [Test]
         public void ViewSegmentCleanup_NullSegments_Throws_EmptyReturnsEmpty()
         {
-            var ex = Assert.Throws<ArgumentNullException>(() => ViewSegmentCleanup.Clean(null, ViewBounds2.Empty));
-            Assert.That(ex.ParamName, Is.EqualTo("segments"));
+            var ex = Assert.Throws<ArgumentNullException>(() => ViewSegmentCleanup.Clean(null!, ViewBounds2.Empty));
+            Assert.That(ex!.ParamName, Is.EqualTo("segments"));
 
             var cleaned = ViewSegmentCleanup.Clean(Array.Empty<ViewSegment>(), ViewBounds2.Empty);
             Assert.That(cleaned.Count, Is.EqualTo(0), "空输入 ⇒ 空输出（不抛）");

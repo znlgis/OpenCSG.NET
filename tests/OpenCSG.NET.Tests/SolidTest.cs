@@ -16,7 +16,7 @@ namespace Csg.Test
 			var rname = $"{fixtureName}.{testName}_.stl";
 			var asmPath = System.Reflection.Assembly.GetCallingAssembly().Location;
 			var repoPath = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(asmPath))));
-			var resultsPath = Path.Combine(repoPath, "Results");
+			var resultsPath = Path.Combine(repoPath!, "Results");
 			if (!Directory.Exists(resultsPath))
 			{
 				Assert.Inconclusive("Test results directory not found at {0}", resultsPath);
@@ -129,9 +129,9 @@ namespace Csg.Test
 				var offset = 1 + i * 7;
 				// facet normal line: offset
 				// outer loop line: offset + 1
-				var v1 = lines[offset + 2].Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
-				var v2 = lines[offset + 3].Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
-				var v3 = lines[offset + 4].Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+				var v1 = lines[offset + 2].Split((char[])null!, StringSplitOptions.RemoveEmptyEntries);
+				var v2 = lines[offset + 3].Split((char[])null!, StringSplitOptions.RemoveEmptyEntries);
+				var v3 = lines[offset + 4].Split((char[])null!, StringSplitOptions.RemoveEmptyEntries);
 
 				tri[i] = new Triangle
 				{

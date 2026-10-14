@@ -30,8 +30,8 @@ namespace Csg.Test
             // 读实现：路径判据是 string.IsNullOrWhiteSpace ⇒ null/空/全空白一律 ArgumentException（非 NullReferenceException）。
             foreach (var path in new[] { null, "", "   " })
             {
-                var ex = Assert.Throws<ArgumentException>(() => StlWriter.Write(path, Triangles()));
-                Assert.That(ex.ParamName, Is.EqualTo("path"));
+                var ex = Assert.Throws<ArgumentException>(() => StlWriter.Write(path!, Triangles()));
+                Assert.That(ex!.ParamName, Is.EqualTo("path"));
                 Assert.That(ex.Message, Does.Contain("路径不能为空"));
             }
         }
@@ -40,8 +40,8 @@ namespace Csg.Test
         public void Write_NullTriangles_ThrowsArgumentNullException()
         {
             var path = TempPath("null-tris.stl");
-            var ex = Assert.Throws<ArgumentNullException>(() => StlWriter.Write(path, null));
-            Assert.That(ex.ParamName, Is.EqualTo("triangles"));
+            var ex = Assert.Throws<ArgumentNullException>(() => StlWriter.Write(path, null!));
+            Assert.That(ex!.ParamName, Is.EqualTo("triangles"));
             Assert.That(File.Exists(path), Is.False, "参数校验失败不得落半成品文件");
         }
 
@@ -50,7 +50,7 @@ namespace Csg.Test
         {
             // 空白校验之后路径交给 BCL：NUL 字符由 Path.GetFullPath 拒绝（ArgumentException，非 IO 异常）。
             var ex = Assert.Throws<ArgumentException>(() => StlWriter.Write("bad\0path.stl", Triangles()));
-            Assert.That(ex.Message, Does.Contain("Null character"));
+            Assert.That(ex!.Message, Does.Contain("Null character"));
         }
 
         [Test]

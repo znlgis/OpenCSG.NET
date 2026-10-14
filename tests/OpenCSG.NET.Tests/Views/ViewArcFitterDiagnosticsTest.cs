@@ -62,7 +62,7 @@ namespace Csg.Test
             var timeout = TimeSpan.FromSeconds(20);
             bool? otherThreadSawEnabled = null;
             var otherThreadDone = false;
-            Exception otherThreadError = null;
+            Exception otherThreadError = null!;
             var otherStarted = false;
 
             var other = new Thread(() =>

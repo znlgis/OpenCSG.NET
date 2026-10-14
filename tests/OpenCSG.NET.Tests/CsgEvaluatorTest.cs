@@ -82,7 +82,7 @@ namespace Csg.Test
         [Test]
         public void EvaluateNullNode_ThrowsEvaluationException()
         {
-            Assert.Throws<CsgEvaluationException>(() => CsgEvaluator.Evaluate(null));
+            Assert.Throws<CsgEvaluationException>(() => CsgEvaluator.Evaluate(null!));
         }
 
         [Test]

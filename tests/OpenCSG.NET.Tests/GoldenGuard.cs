@@ -59,14 +59,14 @@ namespace Csg.Test
                     + "此时门禁形同虚设，故判失败而不是静默通过。");
             }
 
-            var pending = FindPendingGoldens(results);
+            var pending = FindPendingGoldens(results!);
 
             if (pending.Count == 0)
                 return;
 
             var names = new List<string>();
             foreach (var path in pending)
-                names.Add(Path.GetRelativePath(results, path));
+                names.Add(Path.GetRelativePath(results!, path));
 
             Assert.Fail(
                 $"有 {pending.Count} 个 golden 结果未升级（以下路径相对 Results 目录）：\n  {string.Join("\n  ", names)}\n"

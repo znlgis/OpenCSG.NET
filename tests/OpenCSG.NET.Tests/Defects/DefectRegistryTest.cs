@@ -118,7 +118,7 @@ namespace Csg.Test
         }
 
         /// <summary>从 startDirectory 逐级向上找含 OpenCSG.NET.slnx 的目录；找不到返回 null。</summary>
-        internal static string FindRepoRoot(string startDirectory)
+        internal static string? FindRepoRoot(string startDirectory)
         {
             var dir = string.IsNullOrEmpty(startDirectory) ? null : new DirectoryInfo(startDirectory);
             while (dir != null)
@@ -255,7 +255,7 @@ namespace Csg.Test
         [Test]
         public void ParseRegisteredIds_EmptyRegistry_IsEmpty()
         {
-            Assert.That(ParseRegisteredIds(null), Is.Empty);
+            Assert.That(ParseRegisteredIds(null!), Is.Empty);
             Assert.That(ParseRegisteredIds(string.Empty), Is.Empty);
             Assert.That(
                 ParseRegisteredIds("# 标题\n\n| ID | 模块 |\n| --- | --- |\n规则文本：每个 DEFECT-nnn 编号…\n"),
@@ -310,7 +310,7 @@ namespace Csg.Test
         [Test]
         public void ParseExplicitReferences_EmptySources_IsEmpty()
         {
-            Assert.That(ParseExplicitReferences(null), Is.Empty);
+            Assert.That(ParseExplicitReferences(null!), Is.Empty);
             Assert.That(ParseExplicitReferences(Array.Empty<string>()), Is.Empty);
             Assert.That(ParseExplicitReferences(new[] { string.Empty, "// 没有引用的注释" }), Is.Empty);
         }
@@ -466,7 +466,7 @@ namespace Csg.Test
             var root = FindRepoRoot(AppContext.BaseDirectory);
 
             Assert.That(root, Is.Not.Null, $"从 {AppContext.BaseDirectory} 向上应能找到 OpenCSG.NET.slnx");
-            Assert.That(File.Exists(Path.Combine(root, "tests", "DEFECTS.md")), Is.True,
+            Assert.That(File.Exists(Path.Combine(root!, "tests", "DEFECTS.md")), Is.True,
                 $"仓库根 {root} 下应存在 tests/DEFECTS.md");
         }
 
@@ -484,7 +484,8 @@ namespace Csg.Test
                     + "DEFECTS.md 与 tests/ 源码都相对仓库根定位，定位失败时双向索引检查会形同虚设，故判失败而不是静默通过。");
             }
 
-            return root;
+            // 上面的 if 已在 null 时分判失败；Assert.Fail 无 [DoesNotReturn] 标注，流分析看不到终止性，故此处显式断言。
+            return root!;
         }
 
         private static string DefectRegistryPath(string repoRoot)

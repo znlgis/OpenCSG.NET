@@ -72,7 +72,7 @@ namespace Csg.Test
                 var ex = Assert.Throws<InvalidOperationException>(
                     () => PrimitiveConvention.ValidateProbeFactor("TestHost.CreateBox", "X", factor),
                     $"factor={factor:R} 应被拒绝");
-                Assert.That(ex.Message, Does.Contain("TestHost.CreateBox"), "消息须含宿主调用");
+                Assert.That(ex!.Message, Does.Contain("TestHost.CreateBox"), "消息须含宿主调用");
                 Assert.That(ex.Message, Does.Contain("X"), "消息须含轴向");
             }
         }

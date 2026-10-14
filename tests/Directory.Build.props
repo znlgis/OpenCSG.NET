@@ -1,0 +1,24 @@
+<Project>
+
+  <!--
+    tests/ 下所有工程共用的构建配置（ApiCompat / TestKit / Tests / SystemTests）。
+
+    - Nullable=enable：测试面与主工程 `src/OpenCSG.NET` 一样开启可空引用类型检查。
+    - LangVersion=9.0：与主工程（src/OpenCSG.NET.csproj）一致，钉死语言版本，
+      避免同一份代码在 net8.0 / net10.0 两个 TFM 下按各自默认（C# 12 / C# 14）
+      解析出不同语义；个别工程（如 ApiCompat）如需覆盖可在工程内显式指定
+      （Directory.Build.props 在工程文件之前导入，工程内的同名属性优先生效）。
+    - TreatWarningsAsErrors：**未启用**（先测后定的普查裁定，2026-10-14）：
+      开启 Nullable 后本目录警告普查为 77 处 / 14 个文件（全部 CS86xx 可空性，
+      集中在刻意传 null 的 *ContractTest 与 golden 路径定位），属计划所称「洪泛」档
+      ⇒ 按计划「洪泛 ⇒ 报告数字并以 Nullable 单独先行」保持 TWAE 关闭；
+      77 处已在同一任务中逐处修净（null 宽容断言/`!`/`string?` 标注，纯编译期、零语义变化），
+      全量 Rebuild 实测 0 警告 0 错误。启用 TWAE 只需在下方 PropertyGroup 加一行。
+      注：ApiCompat 工程自身仍显式 TWAE=true，不受本项影响。
+  -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <LangVersion>9.0</LangVersion>
+  </PropertyGroup>
+
+</Project>

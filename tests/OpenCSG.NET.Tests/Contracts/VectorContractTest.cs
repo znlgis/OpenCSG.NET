@@ -16,11 +16,11 @@ namespace Csg.Test
         public void Matrix4x4_Ctor_NullOrShortElements_Throw()
         {
             // 读实现：els == null ⇒ ArgumentNullException(nameof(els))；els.Length < 16 ⇒ ArgumentException(nameof(els))。
-            var nullEx = Assert.Throws<ArgumentNullException>(() => new Matrix4x4(null));
-            Assert.That(nullEx.ParamName, Is.EqualTo("els"));
+            var nullEx = Assert.Throws<ArgumentNullException>(() => new Matrix4x4(null!));
+            Assert.That(nullEx!.ParamName, Is.EqualTo("els"));
 
             var shortEx = Assert.Throws<ArgumentException>(() => new Matrix4x4(new double[15]));
-            Assert.That(shortEx.ParamName, Is.EqualTo("els"));
+            Assert.That(shortEx!.ParamName, Is.EqualTo("els"));
             Assert.That(shortEx.Message, Does.Contain("16"), "消息应点明需要 16 个元素");
         }
 
@@ -78,7 +78,7 @@ namespace Csg.Test
                 new Vector3D(0, 0, 0), new Vector3D(1, 1, 1), new Vector3D(2, 2, 2),
             };
             var ex = Assert.Throws<ArgumentException>(() => Plane.FromVector3Ds(colinear));
-            Assert.That(ex.ParamName, Is.EqualTo("vectors"));
+            Assert.That(ex!.ParamName, Is.EqualTo("vectors"));
             Assert.That(ex.Message, Does.Contain("colinear"));
 
             // 前三个共线但第 4 个不共线：实现须继续向后寻找（increment 循环），不得误抛。
@@ -98,7 +98,7 @@ namespace Csg.Test
             // 退化输入：零向量 Unit ⇒ 0/0 = NaN ⇒ 构造校验（Vector.cs 的 NaN guard）接手抛错。
             // 契约口径：Vector3D 的公开 API 不产出 NaN 向量（与 Vector3D ctor 的三分量 NaN 校验一致）。
             var ex = Assert.Throws<ArgumentOutOfRangeException>(() => { var _ = new Vector3D(0, 0, 0).Unit; });
-            Assert.That(ex.Message, Does.Contain("NaN"));
+            Assert.That(ex!.Message, Does.Contain("NaN"));
         }
 
         [Test]

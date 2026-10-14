@@ -16,16 +16,16 @@ namespace Csg.Test
         [Test]
         public void RevolvedStack_NullEmptyOrSingleStation_Throws()
         {
-            var nullEx = Assert.Throws<ArgumentException>(() => CsgHelpers.RevolvedStack(null, 0, 0, 0));
-            Assert.That(nullEx.ParamName, Is.EqualTo("stations"));
+            var nullEx = Assert.Throws<ArgumentException>(() => CsgHelpers.RevolvedStack(null!, 0, 0, 0));
+            Assert.That(nullEx!.ParamName, Is.EqualTo("stations"));
 
             var emptyEx = Assert.Throws<ArgumentException>(
                 () => CsgHelpers.RevolvedStack(Array.Empty<(double Radius, double Y)>(), 0, 0, 0));
-            Assert.That(emptyEx.ParamName, Is.EqualTo("stations"));
+            Assert.That(emptyEx!.ParamName, Is.EqualTo("stations"));
 
             var singleEx = Assert.Throws<ArgumentException>(
                 () => CsgHelpers.RevolvedStack(new[] { (Radius: 1.0, Y: 0.0) }, 0, 0, 0));
-            Assert.That(singleEx.Message, Does.Contain("两个站点"));
+            Assert.That(singleEx!.Message, Does.Contain("两个站点"));
         }
 
         [Test]
@@ -33,12 +33,12 @@ namespace Csg.Test
         {
             var descending = Assert.Throws<ArgumentException>(() => CsgHelpers.RevolvedStack(
                 new[] { (Radius: 1.0, Y: 1.0), (Radius: 1.0, Y: 0.0) }, 0, 0, 0));
-            Assert.That(descending.Message, Does.Contain("严格升序"));
+            Assert.That(descending!.Message, Does.Contain("严格升序"));
 
             // 等高（h = 0）同样不是严格升序。
             var equal = Assert.Throws<ArgumentException>(() => CsgHelpers.RevolvedStack(
                 new[] { (Radius: 1.0, Y: 0.0), (Radius: 2.0, Y: 0.0) }, 0, 0, 0));
-            Assert.That(equal.Message, Does.Contain("严格升序"));
+            Assert.That(equal!.Message, Does.Contain("严格升序"));
         }
 
         [Test]
@@ -46,7 +46,7 @@ namespace Csg.Test
         {
             var ex = Assert.Throws<ArgumentException>(() => CsgHelpers.RevolvedStack(
                 new[] { (Radius: -1.0, Y: 0.0), (Radius: 1.0, Y: 1.0) }, 0, 0, 0));
-            Assert.That(ex.Message, Does.Contain("不得为负"));
+            Assert.That(ex!.Message, Does.Contain("不得为负"));
         }
 
         [Test]
@@ -54,7 +54,7 @@ namespace Csg.Test
         {
             var ex = Assert.Throws<ArgumentException>(() => CsgHelpers.RevolvedStack(
                 new[] { (Radius: 0.0, Y: 0.0), (Radius: 0.0, Y: 1.0) }, 0, 0, 0));
-            Assert.That(ex.Message, Does.Contain("均为 0"));
+            Assert.That(ex!.Message, Does.Contain("均为 0"));
         }
 
         [Test]
@@ -92,13 +92,13 @@ namespace Csg.Test
             var build = Assert.Throws<ArgumentException>(
                 () => HalfPlaneCut.Build(centerX: 0, refY: 0, refZ: 0, dirY: 0, dirZ: 0,
                     halfExtent: 10, overshoot: 5, sideSign: 1));
-            Assert.That(build.ParamName, Is.EqualTo("dirY"));
+            Assert.That(build!.ParamName, Is.EqualTo("dirY"));
             Assert.That(build.Message, Does.Contain("为零"));
 
             var buildXY = Assert.Throws<ArgumentException>(
                 () => HalfPlaneCut.BuildXY(refX: 0, refY: 0, dirX: 0, dirY: 0,
                     halfExtent: 10, overshoot: 5, sideSign: 1, centerZ: 0));
-            Assert.That(buildXY.ParamName, Is.EqualTo("dirX"));
+            Assert.That(buildXY!.ParamName, Is.EqualTo("dirX"));
             Assert.That(buildXY.Message, Does.Contain("为零"));
         }
 

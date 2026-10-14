@@ -1,7 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- 双 TFM（Plan F / Task 1）：无 -f 时 `dotnet test` 依次全跑两个 TFM（双份时长）；
+         本地快速档：`dotnet test tests/OpenCSG.NET.Tests -c Release -f net8.0`。
+         两 TFM 共用同一 Results/ golden 目录（GoldenPaths 从 csproj 向上定位），基线须两边皆绿。 -->
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 

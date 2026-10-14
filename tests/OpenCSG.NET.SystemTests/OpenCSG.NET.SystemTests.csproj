@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- 双 TFM（Plan F / Task 1）：无 -f 时 `dotnet test` 依次全跑两个 TFM（双份时长，含 Perf ~25s/TFM）；
+         本地快速档：`dotnet test tests/OpenCSG.NET.SystemTests -c Release -f net8.0`。 -->
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <IsPackable>false</IsPackable>
     <Nullable>enable</Nullable>
   </PropertyGroup>

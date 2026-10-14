@@ -19,11 +19,11 @@ namespace Csg.Test
         {
             var height = Assert.Throws<CsgEvaluationException>(
                 () => CsgEvaluator.Evaluate(new CylinderNode(new Vector3D(0, 0, 0), Radius: 1, Height: 0)));
-            Assert.That(height.Message, Does.Contain("height").IgnoreCase);
+            Assert.That(height!.Message, Does.Contain("height").IgnoreCase);
 
             var radius = Assert.Throws<CsgEvaluationException>(
                 () => CsgEvaluator.Evaluate(new CylinderNode(new Vector3D(0, 0, 0), Radius: 0, Height: 1)));
-            Assert.That(radius.Message, Does.Contain("radius").IgnoreCase);
+            Assert.That(radius!.Message, Does.Contain("radius").IgnoreCase);
         }
 
         [Test]
@@ -31,7 +31,7 @@ namespace Csg.Test
         {
             var ex = Assert.Throws<CsgEvaluationException>(
                 () => CsgEvaluator.Evaluate(new WedgeNode(new Vector3D(0, 0, 0), Width: 0, Depth: 1, Height: 1)));
-            Assert.That(ex.Message, Does.Contain("Wedge dimensions"));
+            Assert.That(ex!.Message, Does.Contain("Wedge dimensions"));
         }
 
         [Test]
@@ -39,7 +39,7 @@ namespace Csg.Test
         {
             var ex = Assert.Throws<CsgEvaluationException>(
                 () => CsgEvaluator.Evaluate(new ExtrudeNode(Profiles.Rectangle(1, 1), Height: 0)));
-            Assert.That(ex.Message, Does.Contain("Extrude height"));
+            Assert.That(ex!.Message, Does.Contain("Extrude height"));
         }
 
         [Test]
@@ -51,24 +51,24 @@ namespace Csg.Test
                 {
                     new Vector2D(0, 0), new Vector2D(0, 0), new Vector2D(0, 0), new Vector2D(0, 0),
                 }), 1)));
-            Assert.That(failed.Message, Does.Contain("Triangulation failed"));
+            Assert.That(failed!.Message, Does.Contain("Triangulation failed"));
 
             // 路径②：顶点不足 3 ⇒ 三角化不产出任何三角形 ⇒ 另一个分支的专用消息。
             var none = Assert.Throws<CsgEvaluationException>(() => CsgEvaluator.Evaluate(
                 new ExtrudeNode(new PolygonProfile(new[] { new Vector2D(0, 0), new Vector2D(1, 1) }), 1)));
-            Assert.That(none.Message, Does.Contain("no triangles"));
+            Assert.That(none!.Message, Does.Contain("no triangles"));
         }
 
         [Test]
         public void Boolean_WithoutChildren_ThrowsCsgEvaluationException()
         {
             var nullChildren = Assert.Throws<CsgEvaluationException>(
-                () => CsgEvaluator.Evaluate(new UnionNode(null)));
-            Assert.That(nullChildren.Message, Does.Contain("at least one child"));
+                () => CsgEvaluator.Evaluate(new UnionNode(null!)));
+            Assert.That(nullChildren!.Message, Does.Contain("at least one child"));
 
             var emptyChildren = Assert.Throws<CsgEvaluationException>(
                 () => CsgEvaluator.Evaluate(new SubtractNode(new List<CsgNode>())));
-            Assert.That(emptyChildren.Message, Does.Contain("at least one child"));
+            Assert.That(emptyChildren!.Message, Does.Contain("at least one child"));
         }
 
         [Test]
@@ -76,19 +76,19 @@ namespace Csg.Test
         {
             var nodeEx = Assert.Throws<CsgEvaluationException>(
                 () => CsgEvaluator.Evaluate(new UnknownNode()));
-            Assert.That(nodeEx.Message, Does.Contain("Unknown node type").And.Contain(nameof(UnknownNode)));
+            Assert.That(nodeEx!.Message, Does.Contain("Unknown node type").And.Contain(nameof(UnknownNode)));
 
             var profileEx = Assert.Throws<CsgEvaluationException>(
                 () => CsgEvaluator.Evaluate(new ExtrudeNode(new UnknownProfile(), 1)));
-            Assert.That(profileEx.Message, Does.Contain("Unknown Profile2D type").And.Contain(nameof(UnknownProfile)));
+            Assert.That(profileEx!.Message, Does.Contain("Unknown Profile2D type").And.Contain(nameof(UnknownProfile)));
         }
 
         [Test]
         public void EvaluateAll_NullElement_ThrowsCsgEvaluationException()
         {
             var ex = Assert.Throws<CsgEvaluationException>(
-                () => CsgEvaluator.EvaluateAll(new CsgNode[] { null }));
-            Assert.That(ex.Message, Does.Contain("must not be null"));
+                () => CsgEvaluator.EvaluateAll(new CsgNode[] { null! }));
+            Assert.That(ex!.Message, Does.Contain("must not be null"));
         }
 
         [Test]

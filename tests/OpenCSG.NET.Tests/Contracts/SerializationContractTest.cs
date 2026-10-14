@@ -28,14 +28,14 @@ namespace Csg.Test
         {
             // 读实现：Deserialize 返回 null ⇒ JsonException("Deserialization returned null")。
             var ex = Assert.Throws<JsonException>(() => CsgSerialization.FromJson("null"));
-            Assert.That(ex.Message, Does.Contain("null"));
+            Assert.That(ex!.Message, Does.Contain("null"));
         }
 
         [Test]
         public void FromJsonArray_NullLiteral_ThrowsJsonException()
         {
             var ex = Assert.Throws<JsonException>(() => CsgSerialization.FromJsonArray("null"));
-            Assert.That(ex.Message, Does.Contain("null"));
+            Assert.That(ex!.Message, Does.Contain("null"));
         }
 
         [Test]
@@ -43,11 +43,11 @@ namespace Csg.Test
         {
             // 写出侧的 default 分支同样是明确契约（读实现 CsgNodeConverter.Write / Profile2DConverter.Write）。
             var nodeEx = Assert.Throws<JsonException>(() => CsgSerialization.ToJson(new UnknownNode()));
-            Assert.That(nodeEx.Message, Does.Contain("Unknown CsgNode type").And.Contain(nameof(UnknownNode)));
+            Assert.That(nodeEx!.Message, Does.Contain("Unknown CsgNode type").And.Contain(nameof(UnknownNode)));
 
             var profileEx = Assert.Throws<JsonException>(
                 () => CsgSerialization.ToJson(new ExtrudeNode(new UnknownProfile(), 1)));
-            Assert.That(profileEx.Message, Does.Contain("Unknown Profile2D type").And.Contain(nameof(UnknownProfile)));
+            Assert.That(profileEx!.Message, Does.Contain("Unknown Profile2D type").And.Contain(nameof(UnknownProfile)));
         }
 
         [Test]
@@ -56,7 +56,7 @@ namespace Csg.Test
             // 100 层嵌套远超默认深度上限 64 ⇒ 解析期即拒绝（可捕获的 JsonException，非 StackOverflow）。
             var json = NestJson(100);
             var ex = Assert.Throws<JsonException>(() => CsgSerialization.FromJson(json));
-            Assert.That(ex.Message, Does.Contain("depth"), "守卫消息应点明配置深度上限");
+            Assert.That(ex!.Message, Does.Contain("depth"), "守卫消息应点明配置深度上限");
         }
 
         [Test]
@@ -64,7 +64,7 @@ namespace Csg.Test
         {
             var deep = NestTree(100);
             var ex = Assert.Throws<JsonException>(() => CsgSerialization.ToJson(deep));
-            Assert.That(ex.Message, Does.Contain("serialized").Or.Contain("depth"));
+            Assert.That(ex!.Message, Does.Contain("serialized").Or.Contain("depth"));
         }
 
         [Test]
